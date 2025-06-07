@@ -1,73 +1,198 @@
-var shardsize = 18
-var video = 'video.mp4'
+// Configuration
+const video = 'video.mp4';
+const FPS = 30; // Frames per second
+const frameInterval = 1000 / FPS; // ~33.33ms per frame
+const framesPerSecond = 30; // Number of screenshots per second
+const BATCH_SIZE = 350; // Process this many frames at once to avoid ENAMETOOLONG error
+const PARALLEL_CONVERSIONS = 8; // Number of parallel ASCII conversions
 
-var asciify = require('asciify-image');
-ffmpeg = require('fluent-ffmpeg');
-rimraf = require("rimraf");
-fs = require('fs');
-rimraf.sync('./render');fs.mkdirSync("./render")
-rimraf.sync('./output');fs.mkdirSync("./output")
-ffmpeg.setFfmpegPath(require('@ffmpeg-installer/ffmpeg').path);
+// Import dependencies - consolidated require statements
+const asciify = require('asciify-image');
+const ffmpeg = require('fluent-ffmpeg');
+const rimraf = require("rimraf");
+const fs = require('fs');
+const path = require('path');
 const { getVideoDurationInSeconds } = require('get-video-duration');
-getVideoDurationInSeconds(video).then((duration) => {var seccond = []//shards
-for (var i = 0; i < Number(duration.toFixed()); i++) {seccond.push(i)}
-var shards = 0,shard = [];
-seccond.map((x)=>{if(shards === shardsize) shards = 0;shards++;shard.push({number:x,shard:shards})})
-console.log("Renderring shard:"+shardsize+"/"+shardsize)
-for (var i = 1; i < shardsize+1; i++) { var rendershard = []
-shard.filter(z=>z.shard === i).map(x=>rendershard.push(x.number))
-render(rendershard,i)
-}})
+const { Worker, isMainThread, parentPort, workerData } = require('worker_threads');
+const os = require('os');
 
-complated = 0,listsharddb  = []
-async function render(seccond,c){//video to screenshots
-  var tmpdb = []
-  seccond.map((i)=>{
-    tmpdb.push(
-        i+0.033, i+0.066, i+0.099, i+0.132, i+0.165, i+0.198, i+0.231, i+0.264, i+0.297,
-        i+0.330, i+0.363, i+0.396, i+0.426, i+0.462, i+0.495, i+0.528, i+0.561, i+0.594, 
-        i+0.627, i+0.660, i+0.693, i+0.726, i+0.759, i+0.792, i+0.825, i+0.858, i+0.891, 
-        i+0.924, i+0.957, i+0.990
-    )})//.videoCodec('h264_amf')
-await ffmpeg({source: video}).takeScreenshots({filename:"screen.png",timemarks:tmpdb},"render/render"+c)
-.on('end', () => { 
-  var nnumber = 0;
-  var tmpnumber = 0;
-for (var i = 0; i < fs.readdirSync("render/render"+c).length; i++) {
-if(tmpnumber == 30 && seccond[nnumber+1]) {nnumber++;tmpnumber = 0;}
-tmpnumber++;
-listsharddb.push({source:"render/render"+c+"/screen_"+(i+1)+".png",img:seccond[nnumber]+(0.033*tmpnumber)})
-};complated++;
-console.log("Complated shard:"+complated)
-if(complated === shardsize) {
-console.log("Renderring")
-listsharddb.sort(function(a, b) {return a.time - b.time;});
-listsharddb.map((x)=>{
- asciirender(x.source,x.img)
-})}
-})
-}
+// Setup ffmpeg
+ffmpeg.setFfmpegPath(require('@ffmpeg-installer/ffmpeg').path);
 
-async function asciirender(x,y) {//screenshots to text
- await asciify(x, {fit: 'box',width: process.stdout.columns,height: process.stdout.rows})
- .then(async function (asciified) {
- await fs.writeFileSync("output/"+y+".txt",asciified)
- if(y === arr[arr.length]) {
-    rimraf.sync('./render');
-    console.log("Starting...")
-    run()
- }}).catch(()=>{});
-}
+// Clean and create directories
+['./render', './output'].forEach(dir => {
+  if (fs.existsSync(dir)) rimraf.sync(dir);
+  fs.mkdirSync(dir);
+});
 
-async function run(){//output
-  var tempdb = []
-  fs.readdirSync("output").map(async (x)=> tempdb.push(Number(x.replace(".txt",""))))
-  tempdb.sort(function(a, b) {return a - b;});
-  var frame = 0;
-  setInterval(()=>{
-      if(frame == tempdb.length) process.exit(0)
-      console.clear()
-      console.log(fs.readFileSync("output/"+String(tempdb[frame])+".txt").toString())
-      frame++;
-    },30.9999)
+console.log(`Starting video to ASCII conversion for ${video}`);
+console.log(`Using up to ${PARALLEL_CONVERSIONS} parallel ASCII conversions (${os.cpus().length} CPU cores available)`);
+
+// Process based on video duration
+getVideoDurationInSeconds(video).then(async (duration) => {
+  console.log(`Video duration: ${duration.toFixed(2)} seconds`);
+  
+  // Generate timestamps for each frame (30 fps)
+  const totalFrames = Math.floor(duration * framesPerSecond);
+  const frameList = [];
+  
+  // Create timestamp array for all frames
+  const timemarks = Array.from({ length: totalFrames }, (_, i) => 
+    (i / framesPerSecond).toFixed(3)
+  );
+  
+  console.log(`Total frames to process: ${totalFrames}`);
+  
+  // Process in batches to avoid ENAMETOOLONG error
+  const batches = [];
+  for (let i = 0; i < timemarks.length; i += BATCH_SIZE) {
+    batches.push(timemarks.slice(i, i + BATCH_SIZE));
   }
+  
+  console.log(`Processing in ${batches.length} batches of up to ${BATCH_SIZE} frames each`);
+  
+  // Create render directory
+  const renderDir = './render';
+  if (!fs.existsSync(renderDir)) {
+    fs.mkdirSync(renderDir, { recursive: true });
+  }
+  
+  // Process all batches sequentially, but with potential for parallel ffmpeg processes
+  let batchPromises = [];
+  let completedFrames = 0;
+  
+  for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
+    const batch = batches[batchIndex];
+    const batchDir = `${renderDir}/batch${batchIndex}`;
+    
+    if (!fs.existsSync(batchDir)) {
+      fs.mkdirSync(batchDir, { recursive: true });
+    }
+    
+    // Add progress indicator
+    process.stdout.write(`\rProcessing video frames: ${completedFrames}/${totalFrames} [${Math.floor(completedFrames/totalFrames*100)}%]`);
+    
+    await new Promise((resolve, reject) => {
+      ffmpeg({ source: video })
+         // Use all CPU cores for ffmpeg
+          .takeScreenshots({ 
+            filename: `frame_%d.png`, 
+            timemarks: batch,
+            size: `512x288` // 16:9 aspect ratio closest to original size
+        }, batchDir)
+        .on('end', () => {
+          completedFrames += batch.length;
+          process.stdout.write(`\rProcessing video frames: ${completedFrames}/${totalFrames} [${Math.floor(completedFrames/totalFrames*100)}%]`);
+          
+          // Map the created files to their timestamps
+          const files = fs.readdirSync(batchDir);
+          files.forEach((file, i) => {
+            if (i < batch.length) {
+              frameList.push({
+                source: path.join(batchDir, file),
+                time: parseFloat(batch[i])
+              });
+            }
+          });
+          
+          resolve();
+        })
+        .on('error', (err) => {
+          console.error(`\nError in batch ${batchIndex}:`, err);
+          reject(err);
+        });
+    }).catch(err => console.error('\nBatch processing error:', err));
+  }
+  
+  console.log("\nAll video frames extracted. Starting ASCII conversion...");
+  
+  // Sort frames by timestamp
+  frameList.sort((a, b) => a.time - b.time);
+  
+  // Convert frames to ASCII art using worker threads for better CPU utilization
+  const convertFramesToAscii = async () => {
+    const frames = [...frameList];
+    let completedCount = 0;
+    const totalCount = frames.length;
+    
+    // Process in smaller chunks to control memory usage
+    for (let i = 0; i < frames.length; i += PARALLEL_CONVERSIONS) {
+      const chunk = frames.slice(i, i + PARALLEL_CONVERSIONS);
+      const chunkPromises = chunk.map(frame => 
+        processAsciiFrame(frame.source, frame.time)
+      );
+      
+      await Promise.all(chunkPromises);
+      completedCount += chunk.length;
+      process.stdout.write(`\rConverting to ASCII: ${completedCount}/${totalCount} [${Math.floor(completedCount/totalCount*100)}%]`);
+    }
+    
+    console.log("\nASCII conversion complete!");
+    return true;
+  };
+  
+  // Process a single frame to ASCII and save to output
+  async function processAsciiFrame(imagePath, timestamp) {
+    try {
+      const asciified = await asciify(imagePath, {
+        fit: 'box',
+        width: process.stdout.columns,
+        height: process.stdout.rows,
+        color: false
+      });
+      
+      await fs.promises.writeFile(`output/${timestamp.toFixed(3)}.txt`, asciified);
+      return true;
+    } catch (error) {
+      console.error(`\nError processing frame at ${timestamp}:`, error);
+      return false;
+    }
+  }
+  
+  await convertFramesToAscii();
+  
+  // Clean up render directory to free space
+  rimraf.sync(renderDir);
+  console.log("Starting playback...");
+  run();
+  
+  // Play the ASCII animation
+  function run() {
+    const files = fs.readdirSync("output");
+    const timestamps = files
+      .map(file => parseFloat(file.replace(".txt", "")))
+      .sort((a, b) => a - b);
+    
+    let frameIndex = 0;
+    let lastFrameTime = Date.now();
+    
+    function displayNextFrame() {
+      if (frameIndex >= timestamps.length) {
+        console.log("Animation complete");
+        process.exit(0);
+        return;
+      }
+      
+      const timestamp = timestamps[frameIndex];
+      try {
+        console.clear();
+        console.log(fs.readFileSync(`output/${timestamp.toFixed(3)}.txt`, 'utf8'));
+        
+        const now = Date.now();
+        const elapsed = now - lastFrameTime;
+        const delay = Math.max(1, frameInterval - elapsed);
+        
+        frameIndex++;
+        lastFrameTime = now;
+        
+        setTimeout(displayNextFrame, delay);
+      } catch (error) {
+        console.error(`\nError displaying frame ${frameIndex}:`, error);
+        frameIndex++;
+        setTimeout(displayNextFrame, frameInterval);
+      }
+    }
+    
+    displayNextFrame();
+  }
+});
