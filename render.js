@@ -1,8 +1,10 @@
 const video = 'video.mp4';
-const FPS = 24;
-const frameInterval = 1000 / FPS;
+const FPS = 30;
+const res = "512x288";
 const BATCH_SIZE = 350;
 const PARALLEL_CONVERSIONS = 8;
+const frameInterval = 1000 / FPS;
+
 
 const asciify = require('asciify-image');
 const ffmpeg = require('fluent-ffmpeg');
@@ -45,7 +47,6 @@ getVideoDurationInSeconds(video).then(async (duration) => {
     fs.mkdirSync(renderDir, { recursive: true });
   }
   
-  let batchPromises = [];
   let completedFrames = 0;
   
   for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
@@ -63,21 +64,18 @@ getVideoDurationInSeconds(video).then(async (duration) => {
           .takeScreenshots({ 
             filename: `frame_%d.png`, 
             timemarks: batch,
-            size: `512x288`
+            size: res
         }, batchDir)
         .on('end', () => {
           completedFrames += batch.length;
           process.stdout.write(`\rProcessing video frames: ${completedFrames}/${totalFrames} [${Math.floor(completedFrames/totalFrames*100)}%]`);
           
-          const files = fs.readdirSync(batchDir);
-          files.forEach((file, i) => {
-            if (i < batch.length) {
+          for(var i = 0; i < fs.readdirSync(batchDir).length; i++) {
               frameList.push({
-                source: path.join(batchDir, file),
+                source: path.join(batchDir,"frame_1_" + (i + 1) + ".png"),
                 time: parseFloat(batch[i])
               });
-            }
-          });
+          }
           
           resolve();
         })
@@ -87,10 +85,10 @@ getVideoDurationInSeconds(video).then(async (duration) => {
         });
     }).catch(err => console.error('\nBatch processing error:', err));
   }
-  
   console.log("\nAll video frames extracted. Starting ASCII conversion...");
   
   frameList.sort((a, b) => a.time - b.time);
+  fs.writeFileSync('frameList.json', JSON.stringify(frameList, null, 2));
   
   const convertFramesToAscii = async () => {
     const frames = [...frameList];
@@ -145,11 +143,7 @@ getVideoDurationInSeconds(video).then(async (duration) => {
     let lastFrameTime = Date.now();
     
     function displayNextFrame() {
-      if (frameIndex >= timestamps.length) {
-        console.log("Animation complete");
-        process.exit(0);
-        return;
-      }
+      if (frameIndex >= timestamps.length)  process.exit(0);
       
       const timestamp = timestamps[frameIndex];
       try {
