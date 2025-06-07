@@ -1,79 +1,133 @@
 const fs = require('fs');
 const path = require('path');
+const { exec } = require('child_process');
 
-// Configuration
-const FPS = 30; // Frames per second (should match render.js)
-const frameInterval = 1000 / FPS; // ~33.33ms per frame
+const FPS = 30;
+const frameInterval = 1000 / FPS;
+let playbackStartTime = 0;
 
-// Main function to run the playback
-async function run() {
-  // Check if output directory exists
-  const outputDir = path.join(__dirname, 'output');
-  if (!fs.existsSync(outputDir)) {
-    console.error('Error: Output directory does not exist. Run render.js first.');
+__dirname= process.pkg ? path.dirname(process.execPath) : __dirname;
+
+
+async function playCombinedFile(hasAudio) {
+  const combinedFilePath = path.join(__dirname, 'ascii_video.txt');
+  if (!fs.existsSync(combinedFilePath)) {
+    console.error('Error: Combined ASCII file not found. Run render.js first.');
     process.exit(1);
   }
 
-  // Read files from output directory
-  const files = fs.readdirSync(outputDir);
-  if (files.length === 0) {
-    console.error('Error: No ASCII frames found in output directory. Run render.js first.');
-    process.exit(1);
+  console.log('Loading combined ASCII file for playback...');
+  
+  const content = fs.readFileSync(combinedFilePath, 'utf8');
+  const frameMarkerRegex = /===FRAME (\d+\.\d+)===/g;
+  const frames = [];
+  
+  let match;
+  let lastIndex = 0;
+  
+  while ((match = frameMarkerRegex.exec(content)) !== null) {
+    const timestamp = parseFloat(match[1]);
+    const startIndex = match.index + match[0].length + 2;
+    
+    if (lastIndex > 0) {
+      frames.push({
+        time: frames[frames.length-1].time,
+        content: content.substring(lastIndex, match.index).trim()
+      });
+    }
+    
+    frames.push({
+      time: timestamp,
+      content: ''
+    });
+    
+    lastIndex = startIndex;
   }
-
-  console.log(`Found ${files.length} ASCII frames. Starting playback at ${FPS} FPS...`);
   
-  // Parse timestamps from filenames and sort
-  const timestamps = files
-    .map(file => ({
-      time: parseFloat(file.replace('.txt', '')),
-      file: path.join(outputDir, file)
-    }))
-    .sort((a, b) => a.time - b.time);
+  if (lastIndex < content.length) {
+    frames.push({
+      time: frames[frames.length-1].time,
+      content: content.substring(lastIndex).trim()
+    });
+  }
   
-  // Initialize playback
-  let frameIndex = 0;
-  let lastFrameTime = Date.now();
+  console.log(`Loaded ${frames.length/2} frames from combined file. Starting playback at ${FPS} FPS...`);
+  
+  if (hasAudio) {
+    console.log('Starting audio player...');
+    await playAndWaitForAudio(path.resolve(path.join(__dirname, 'audio.mp3')));
+  }
+  
+  playbackStartTime = Date.now();
+  let frameIndex = 1;
   console.log('Press Ctrl+C to exit playback.');
   
-  // Display function with accurate timing
   function displayNextFrame() {
-    if (frameIndex >= timestamps.length) {
+    if (frameIndex >= frames.length) {
       console.log("\nPlayback complete!");
       process.exit(0);
       return;
     }
     
     try {
-      // Read and display current frame
-      const frame = timestamps[frameIndex];
-      const frameContent = fs.readFileSync(frame.file, 'utf8');
       console.clear();
-      console.log(frameContent);
+      console.log(frames[frameIndex].content);
       
-      // Calculate appropriate delay for next frame
-      const now = Date.now();
-      const elapsed = now - lastFrameTime;
-      const delay = Math.max(1, frameInterval - elapsed);
+      frameIndex += 2;
       
-      frameIndex++;
-      lastFrameTime = now;
-      
-      // Schedule next frame with adjusted timing
-      setTimeout(displayNextFrame, delay);
+      if (frameIndex < frames.length) {
+        const currentPlayTime = (Date.now() - playbackStartTime) / 1000;
+        const nextFrameTime = frames[frameIndex].time;
+        const timeUntilNextFrame = Math.max(1, (nextFrameTime - currentPlayTime) * 1000);
+        
+        setTimeout(displayNextFrame, timeUntilNextFrame);
+      } else {
+        setTimeout(displayNextFrame, frameInterval);
+      }
     } catch (error) {
       console.error(`\nError displaying frame ${frameIndex}:`, error);
-      frameIndex++;
+      frameIndex += 2;
       setTimeout(displayNextFrame, frameInterval);
     }
   }
   
-  // Start playback
   displayNextFrame();
 }
 
-// Run the playback
-run().catch(err => {
+async function playAndWaitForAudio(audioPath) {
+  return new Promise((resolve) => {
+    const absolutePath = path.resolve(audioPath);
+    
+    console.log(`Attempting to play audio: ${absolutePath}`);
+    
+    exec(`start /min "" "${absolutePath}"`, (error) => {
+      if (error) {
+        console.error('Failed to start audio playback:', error);
+        
+        const psCommand = `
+          $player = New-Object System.Media.SoundPlayer;
+          $player.SoundLocation = "${absolutePath.replace(/\\/g, "\\\\")};
+          $player.PlaySync();
+        `;
+        
+        console.log('Attempting alternative audio playback method...');
+        exec(`powershell -Command "${psCommand}"`, (err) => {
+          if (err) console.error('Alternative audio playback also failed:', err);
+          setTimeout(resolve, 2000);
+        });
+        return;
+      }
+      
+      console.log('Audio player launched. Waiting for playback to begin...');
+      setTimeout(() => {
+        console.log('Starting ASCII display...');
+        resolve();
+      }, 3000);
+    });
+  });
+}
+
+playCombinedFile(fs.existsSync(path.join(__dirname, 'audio.mp3'))).catch(err => {
   console.error('Playback error:', err);
   process.exit(1);
 });
