@@ -1,1 +1,0 @@
-npm i @ffmpeg-installer/ffmpeg fluent-ffmpeg get-video-duration rimraf asciify-image
