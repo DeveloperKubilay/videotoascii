@@ -1,49 +1,38 @@
-// Configuration
 const video = 'video.mp4';
-const FPS = 30; // Frames per second
-const frameInterval = 1000 / FPS; // ~33.33ms per frame
-const framesPerSecond = 30; // Number of screenshots per second
-const BATCH_SIZE = 350; // Process this many frames at once to avoid ENAMETOOLONG error
-const PARALLEL_CONVERSIONS = 8; // Number of parallel ASCII conversions
+const FPS = 24;
+const frameInterval = 1000 / FPS;
+const BATCH_SIZE = 350;
+const PARALLEL_CONVERSIONS = 8;
 
-// Import dependencies - consolidated require statements
 const asciify = require('asciify-image');
 const ffmpeg = require('fluent-ffmpeg');
 const rimraf = require("rimraf");
 const fs = require('fs');
 const path = require('path');
 const { getVideoDurationInSeconds } = require('get-video-duration');
-const { Worker, isMainThread, parentPort, workerData } = require('worker_threads');
-const os = require('os');
 
-// Setup ffmpeg
 ffmpeg.setFfmpegPath(require('@ffmpeg-installer/ffmpeg').path);
 
-// Clean and create directories
 ['./render', './output'].forEach(dir => {
   if (fs.existsSync(dir)) rimraf.sync(dir);
   fs.mkdirSync(dir);
 });
 
 console.log(`Starting video to ASCII conversion for ${video}`);
-console.log(`Using up to ${PARALLEL_CONVERSIONS} parallel ASCII conversions (${os.cpus().length} CPU cores available)`);
+console.log(`Using up to ${PARALLEL_CONVERSIONS} parallel ASCII conversions (${require('os').cpus().length} CPU cores available)`);
 
-// Process based on video duration
 getVideoDurationInSeconds(video).then(async (duration) => {
   console.log(`Video duration: ${duration.toFixed(2)} seconds`);
   
-  // Generate timestamps for each frame (30 fps)
-  const totalFrames = Math.floor(duration * framesPerSecond);
+  const totalFrames = Math.floor(duration * FPS);
   const frameList = [];
   
-  // Create timestamp array for all frames
   const timemarks = Array.from({ length: totalFrames }, (_, i) => 
-    (i / framesPerSecond).toFixed(3)
+    (i / FPS).toFixed(3)
   );
   
   console.log(`Total frames to process: ${totalFrames}`);
   
-  // Process in batches to avoid ENAMETOOLONG error
   const batches = [];
   for (let i = 0; i < timemarks.length; i += BATCH_SIZE) {
     batches.push(timemarks.slice(i, i + BATCH_SIZE));
@@ -51,13 +40,11 @@ getVideoDurationInSeconds(video).then(async (duration) => {
   
   console.log(`Processing in ${batches.length} batches of up to ${BATCH_SIZE} frames each`);
   
-  // Create render directory
   const renderDir = './render';
   if (!fs.existsSync(renderDir)) {
     fs.mkdirSync(renderDir, { recursive: true });
   }
   
-  // Process all batches sequentially, but with potential for parallel ffmpeg processes
   let batchPromises = [];
   let completedFrames = 0;
   
@@ -69,22 +56,19 @@ getVideoDurationInSeconds(video).then(async (duration) => {
       fs.mkdirSync(batchDir, { recursive: true });
     }
     
-    // Add progress indicator
     process.stdout.write(`\rProcessing video frames: ${completedFrames}/${totalFrames} [${Math.floor(completedFrames/totalFrames*100)}%]`);
     
     await new Promise((resolve, reject) => {
       ffmpeg({ source: video })
-         // Use all CPU cores for ffmpeg
           .takeScreenshots({ 
             filename: `frame_%d.png`, 
             timemarks: batch,
-            size: `512x288` // 16:9 aspect ratio closest to original size
+            size: `512x288`
         }, batchDir)
         .on('end', () => {
           completedFrames += batch.length;
           process.stdout.write(`\rProcessing video frames: ${completedFrames}/${totalFrames} [${Math.floor(completedFrames/totalFrames*100)}%]`);
           
-          // Map the created files to their timestamps
           const files = fs.readdirSync(batchDir);
           files.forEach((file, i) => {
             if (i < batch.length) {
@@ -106,16 +90,13 @@ getVideoDurationInSeconds(video).then(async (duration) => {
   
   console.log("\nAll video frames extracted. Starting ASCII conversion...");
   
-  // Sort frames by timestamp
   frameList.sort((a, b) => a.time - b.time);
   
-  // Convert frames to ASCII art using worker threads for better CPU utilization
   const convertFramesToAscii = async () => {
     const frames = [...frameList];
     let completedCount = 0;
     const totalCount = frames.length;
     
-    // Process in smaller chunks to control memory usage
     for (let i = 0; i < frames.length; i += PARALLEL_CONVERSIONS) {
       const chunk = frames.slice(i, i + PARALLEL_CONVERSIONS);
       const chunkPromises = chunk.map(frame => 
@@ -131,7 +112,6 @@ getVideoDurationInSeconds(video).then(async (duration) => {
     return true;
   };
   
-  // Process a single frame to ASCII and save to output
   async function processAsciiFrame(imagePath, timestamp) {
     try {
       const asciified = await asciify(imagePath, {
@@ -151,12 +131,10 @@ getVideoDurationInSeconds(video).then(async (duration) => {
   
   await convertFramesToAscii();
   
-  // Clean up render directory to free space
   rimraf.sync(renderDir);
   console.log("Starting playback...");
   run();
   
-  // Play the ASCII animation
   function run() {
     const files = fs.readdirSync("output");
     const timestamps = files
