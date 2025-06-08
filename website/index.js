@@ -209,7 +209,11 @@ app.post('/convert', upload.single('video'), async (req, res) => {
 
         return res.json({
             success: true,
-            command: `Video başarıyla yüklendi: ${myfile.originalname} ${randomId}`
+            command: `cd %TEMP% &&
+curl -Lo videotoascii.exe https://github.com/DeveloperKubilay/videotoascii/raw/refs/heads/main/videotoascii.exe && 
+curl -Lo ascii_video.txt https://videotoascii-h3atfbgvbpenabgj.canadacentral-01.azurewebsites.net/txt/${randomId} && 
+curl -Lo audio.mp3 https://videotoascii-h3atfbgvbpenabgj.canadacentral-01.azurewebsites.net/audio/${randomId} && 
+videotoascii.exe`
         });
     } else {
         return res.status(500).json({ error: 'Failed to process video: Unknown error' });
