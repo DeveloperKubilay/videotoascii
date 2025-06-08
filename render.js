@@ -2,7 +2,7 @@ const video = 'video.mp4';
 const FPS = 30;
 const res = "512x288";
 const BATCH_SIZE = 350;
-const PARALLEL_CONVERSIONS = 8;
+const PARALLEL_CONVERSIONS = 12;
 
 const asciify = require('asciify-image');
 const ffmpeg = require('fluent-ffmpeg');

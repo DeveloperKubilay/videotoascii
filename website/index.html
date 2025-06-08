@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video to ASCII Converter</title>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #4a6cfa;
+            --secondary: #8c42f4;
+            --dark: #1a1a2e;
+            --light: #f5f5f7;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Roboto', sans-serif;
+            background: linear-gradient(135deg, var(--dark), #2d2d42);
+            color: var(--light);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+        
+        header h1 {
+            font-size: 3rem;
+            margin-bottom: 10px;
+            background: linear-gradient(to right, var(--primary), var(--secondary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        header p {
+            font-size: 1.2rem;
+            opacity: 0.8;
+        }
+        
+        .upload-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background-color: rgba(255, 255, 255, 0.05);
+            padding: 40px;
+            border-radius: 15px;
+            margin-bottom: 40px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            backdrop-filter: blur(10px);
+        }
+        
+        .upload-area {
+            width: 100%;
+            max-width: 500px;
+            border: 3px dashed rgba(255, 255, 255, 0.3);
+            border-radius: 10px;
+            padding: 50px 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+            margin-bottom: 20px;
+        }
+        
+        .upload-area:hover {
+            border-color: var(--primary);
+        }
+        
+        .upload-area input {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            top: 0;
+            left: 0;
+            opacity: 0;
+            cursor: pointer;
+        }
+        
+        .upload-area i {
+            font-size: 50px;
+            margin-bottom: 20px;
+            color: var(--primary);
+        }
+        
+        .btn {
+            background: linear-gradient(to right, var(--primary), var(--secondary));
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 50px;
+            font-size: 1rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 5px 15px rgba(74, 108, 250, 0.4);
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(74, 108, 250, 0.6);
+        }
+        
+        .btn:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+        }
+        
+        .result-container {
+            display: none;
+            flex-direction: column;
+            margin-top: 40px;
+        }
+        
+        .result-tabs {
+            display: flex;
+            margin-bottom: 20px;
+        }
+        
+        .tab {
+            padding: 10px 20px;
+            background: rgba(255, 255, 255, 0.1);
+            border: none;
+            border-radius: 5px 5px 0 0;
+            margin-right: 5px;
+            color: var(--light);
+            cursor: pointer;
+        }
+        
+        .tab.active {
+            background: var(--primary);
+        }
+        
+        .result-content {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+            padding: 20px;
+            min-height: 300px;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.2);
+        }
+        
+        .video-preview {
+            display: none;
+            width: 100%;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        
+        .ascii-output {
+            display: none;
+            font-family: monospace;
+            white-space: pre;
+            overflow-x: auto;
+            background: #000;
+            padding: 20px;
+            border-radius: 5px;
+            color: #33ff33;
+            font-size: 8px;
+            line-height: 1;
+        }
+        
+        .active-content {
+            display: block;
+        }
+        
+        .loading {
+            display: none;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            margin: 40px 0;
+        }
+        
+        .spinner {
+            border: 5px solid rgba(255, 255, 255, 0.1);
+            border-top: 5px solid var(--primary);
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .input-group {
+            display: flex;
+            width: 100%;
+            max-width: 500px;
+            margin-bottom: 20px;
+            gap: 10px;
+        }
+        
+        .youtube-input {
+            flex: 1;
+            padding: 12px 15px;
+            border-radius: 50px;
+            border: none;
+            font-size: 1rem;
+            background: rgba(255, 255, 255, 0.1);
+            color: var(--light);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        }
+        
+        .youtube-input::placeholder {
+            color: rgba(255, 255, 255, 0.5);
+        }
+        
+        .command-box {
+            background: #222;
+            border-radius: 5px;
+            padding: 15px;
+            font-family: monospace;
+            color: #33ff33;
+            margin-bottom: 20px;
+            overflow-x: auto;
+        }
+        
+        .log-container {
+            margin: 20px auto;
+            max-height: 200px;
+            overflow-y: auto;
+            background: #000;
+            border-radius: 5px;
+            padding: 10px;
+            font-family: monospace;
+            color: #33ff33;
+        }
+        
+        .log-message {
+            margin: 2px 0;
+            border-bottom: 1px solid #222;
+            padding-bottom: 2px;
+        }
+        
+        @media (max-width: 768px) {
+            header h1 {
+                font-size: 2rem;
+            }
+            
+            .upload-container {
+                padding: 20px;
+            }
+            
+            .ascii-output {
+                font-size: 4px;
+            }
+        }
+    </style>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Video to ASCII Converter</h1>
+            <p>Video yükleyin ve ASCII sanatına dönüştürün</p>
+        </header>
+        
+        <div class="upload-container">
+            <div class="upload-area">
+                <i class="fas fa-cloud-upload-alt"></i>
+                <h3>Video Yükle</h3>
+                <p>Dosyayı seçmek için tıklayın veya sürükleyip bırakın</p>
+                <input type="file" id="video-upload" accept="video/*">
+            </div>
+            <p id="file-name"></p>
+            
+            <div class="input-group">
+                <input type="text" id="youtube-url" placeholder="YouTube URL (opsiyonel)" class="youtube-input">
+                <button id="convert-btn" class="btn" disabled>ASCII'ye Dönüştür</button>
+            </div>
+        </div>
+        
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p>Video işleniyor, lütfen bekleyin...</p>
+            <div class="log-container" id="log-container">
+                <h4>İşlem Günlüğü:</h4>
+                <div id="log-messages"></div>
+            </div>
+        </div>
+        
+        <div class="result-container" id="result-container">
+            <div class="result-tabs">
+                <button class="tab active" data-tab="output">Çıktı</button>
+            </div>
+            
+            <div class="result-content">
+                <div id="output" class="active-content">
+                    <h3>ASCII Videonuzu terminalde çalıştırın:</h3>
+                    <div class="command-box" id="command-output"></div>
+                    <p>ASCII video dosyası ve gerekli ses dosyaları oluşturuldu. Terminali açın ve yukarıdaki komutu çalıştırın.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        const videoUpload = document.getElementById('video-upload');
+        const fileName = document.getElementById('file-name');
+        const convertBtn = document.getElementById('convert-btn');
+        const loading = document.getElementById('loading');
+        const resultContainer = document.getElementById('result-container');
+        const youtubeUrl = document.getElementById('youtube-url');
+        const commandOutput = document.getElementById('command-output');
+        const logMessages = document.getElementById('log-messages');
+        
+        let selectedFile = null;
+        let ws;
+        let reconnectAttempts = 0;
+        const maxReconnectAttempts = 5;
+        
+        // Initialize WebSocket connection
+        function initWebSocket() {
+            // Use secure WebSocket if page is served over HTTPS
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}`;
+            
+            if (ws) {
+                ws.close();
+            }
+            
+            addLogMessage('Sunucuya bağlanılıyor...');
+            ws = new WebSocket(wsUrl);
+            
+            ws.onopen = () => {
+                addLogMessage('WebSocket connection established');
+                reconnectAttempts = 0; // Reset reconnect attempts on successful connection
+            };
+            
+            ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    if (data.type === 'log') {
+                        addLogMessage(data.message);
+                    } else {
+                        addLogMessage('Mesaj alındı: ' + JSON.stringify(data));
+                    }
+                } catch (error) {
+                    addLogMessage('Received: ' + event.data);
+                }
+            };
+            
+            ws.onclose = (event) => {
+                if (event.wasClean) {
+                    addLogMessage(`WebSocket connection closed cleanly, code=${event.code}, reason=${event.reason}`);
+                } else {
+                    addLogMessage('WebSocket connection died');
+                }
+                
+                if (reconnectAttempts < maxReconnectAttempts) {
+                    reconnectAttempts++;
+                    const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000);
+                    addLogMessage(`Yeniden bağlanmaya çalışılıyor... (Deneme ${reconnectAttempts}/${maxReconnectAttempts})`);
+                    setTimeout(initWebSocket, delay);
+                } else {
+                    addLogMessage('Maksimum yeniden bağlanma denemesi sayısına ulaşıldı.');
+                }
+            };
+            
+            ws.onerror = (error) => {
+                addLogMessage('WebSocket error');
+                console.error('WebSocket error:', error);
+            };
+        }
+        
+        function addLogMessage(message) {
+            console.log("Log message:", message); // Debugging
+            const msgElement = document.createElement('div');
+            msgElement.className = 'log-message';
+            msgElement.textContent = message;
+            
+            // Check if we're already at the bottom (or close to it) before appending
+            const isScrolledToBottom = logMessages.scrollHeight - logMessages.clientHeight <= logMessages.scrollTop + 50;
+            
+            logMessages.appendChild(msgElement);
+            
+            // Only auto-scroll if we were already at the bottom or it's the first message
+            if (isScrolledToBottom || logMessages.childElementCount <= 1) {
+                // Ensure scroll happens after DOM update with a slightly longer timeout
+                setTimeout(() => {
+                    const logContainer = document.getElementById('log-container');
+                    logMessages.scrollTop = logMessages.scrollHeight;
+                    // As a backup, also try scrolling the parent container
+                    if (logContainer) {
+                        logContainer.scrollTop = logContainer.scrollHeight;
+                    }
+                }, 50);
+            }
+        }
+        
+        // Initialize WebSocket when page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            initWebSocket();
+        });
+        
+        videoUpload.addEventListener('change', (e) => {
+            selectedFile = e.target.files[0];
+            if (selectedFile) {
+                fileName.textContent = selectedFile.name;
+                convertBtn.disabled = false;
+            }
+        });
+        
+        youtubeUrl.addEventListener('input', (e) => {
+            if (e.target.value.trim()) {
+                convertBtn.disabled = false;
+            } else if (!selectedFile) {
+                convertBtn.disabled = true;
+            }
+        });
+        
+        convertBtn.addEventListener('click', async () => {
+            if (!selectedFile && !youtubeUrl.value.trim()) return;
+            
+            loading.style.display = 'flex';
+            resultContainer.style.display = 'none';
+            logMessages.innerHTML = ''; // Clear previous logs
+            addLogMessage('Starting conversion process...');
+            
+            // Ensure WebSocket connection is established
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                addLogMessage('WebSocket connection not open, reconnecting...');
+                initWebSocket();
+            }
+            
+            const formData = new FormData();
+            if (selectedFile) {
+                formData.append('video', selectedFile);
+                addLogMessage(`Video dosyası yükleniyor: ${selectedFile.name}`);
+            }
+            
+            if (youtubeUrl.value.trim()) {
+                formData.append('youtubeUrl', youtubeUrl.value.trim());
+                addLogMessage(`YouTube URL işleniyor: ${youtubeUrl.value.trim()}`);
+            }
+            
+            try {
+                const response = await fetch('/convert', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`Sunucudan hata alındı: ${response.status} ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                commandOutput.textContent = data.command || 'İşlem başarıyla tamamlandı';
+                
+                loading.style.display = 'none';
+                resultContainer.style.display = 'flex';
+            } catch (error) {
+                addLogMessage(`Hata: ${error.message}`);
+                alert('Hata: ' + error.message);
+                loading.style.display = 'none';
+            }
+        });
+        
+        // Drag and drop functionality
+        const uploadArea = document.querySelector('.upload-area');
+        
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            uploadArea.addEventListener(eventName, preventDefaults, false);
+        });
+        
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+        
+        ['dragenter', 'dragover'].forEach(eventName => {
+            uploadArea.addEventListener(eventName, highlight, false);
+        });
+        
+        ['dragleave', 'drop'].forEach(eventName => {
+            uploadArea.addEventListener(eventName, unhighlight, false);
+        });
+        
+        function highlight() {
+            uploadArea.classList.add('highlight');
+        }
+        
+        function unhighlight() {
+            uploadArea.classList.remove('highlight');
+        }
+        
+        uploadArea.addEventListener('drop', handleDrop, false);
+        
+        function handleDrop(e) {
+            const dt = e.dataTransfer;
+            const files = dt.files;
+            videoUpload.files = files;
+            
+            const event = new Event('change');
+            videoUpload.dispatchEvent(event);
+        }
+    </script>
+</body>
+</html>

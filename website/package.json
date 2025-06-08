@@ -1,0 +1,22 @@
+{
+  "name": "video-to-ascii-converter",
+  "version": "1.0.0",
+  "description": "A web application that converts videos to ASCII art",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js"
+  },
+  "dependencies": {
+    "@vreden/youtube_scraper": "^1.2.7",
+    "aws-sdk": "^2.1692.0",
+    "express": "^4.17.1",
+    "firebase": "^11.9.0",
+    "firebase-admin": "^13.4.0",
+    "fluent-ffmpeg": "^2.1.2",
+    "multer": "^1.4.4"
+  },
+  "devDependencies": {
+    "nodemon": "^2.0.15"
+  }
+}

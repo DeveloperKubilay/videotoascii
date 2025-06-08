@@ -1,0 +1,8 @@
+{
+    "appService.zipIgnorePattern": [
+        "node_modules{,/**}",
+        ".vscode{,/**}"
+    ],
+    "appService.defaultWebAppToDeploy": "/subscriptions/630c6e12-9fab-4cd5-8f66-56d207ff0ba3/resourceGroups/videotoascii_group/providers/Microsoft.Web/sites/videotoascii",
+    "appService.deploySubpath": "."
+}
