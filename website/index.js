@@ -4,12 +4,15 @@ const path = require('path');
 const fs = require('fs');
 const { ytmp4 } = require('@vreden/youtube_scraper');
 const WebSocket = require('ws');
-const exec = require('child_process').exec;
 const ffmpeg = require('fluent-ffmpeg');
-ffmpeg.setFfmpegPath(require('@ffmpeg-installer/ffmpeg').path);
+if(process.platform != 'win32') ffmpeg.setFfmpegPath(path.join(__dirname, 'ffmpeg'));
 const render = require('./render');
 const AWS = require('aws-sdk');
+const rimraf = require("rimraf");
 require('dotenv').config();
+
+if(!fs.existsSync('./uploads')) 
+    fs.mkdirSync('./uploads', { recursive: true });
 
 const accessKeyId = process.env.AWS_ACCESS_KEY_ID;
 const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
@@ -25,8 +28,7 @@ const s3 = new AWS.S3({
 });
 
 const app = express();
-const port = process.env.PORT || 3000;
-
+const port = process.env.PORT || 8080;
 const server = require('http').createServer(app);
 const wss = new WebSocket.Server({ server });
 const clients = new Set();
@@ -80,143 +82,271 @@ const upload = multer({
     }
 });
 
-app.use(express.static('public'));
-
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
+
+function safeDeleteFile(filePath) {
+    if (filePath && fs.existsSync(filePath)) {
+        try {
+            fs.unlinkSync(filePath);
+            sendLog(`Deleted file: ${filePath}`, false);
+        } catch (err) {
+            console.error(`Failed to delete file ${filePath}: ${err.message}`);
+        }
+    }
+}
 
 app.post('/convert', upload.single('video'), async (req, res) => {
     if (!req.file && (!req.body.youtubeUrl || !req.body.youtubeUrl.trim())) {
         return res.status(400).json({ error: 'No video file uploaded or YouTube URL provided' });
     }
 
-    sendLog('Starting video conversion process');
+    res.status(200).json({ success: true, message: 'Processing started' });
 
-    var myfile = req.file;
+    processVideoAndNotify(req);
+});
 
-    if (req.body.youtubeUrl && req.body.youtubeUrl.trim()) {
-        try {
-            sendLog(`Processing YouTube URL: ${req.body.youtubeUrl}`);
-            const video = await ytmp4(req.body.youtubeUrl, "360")
-            sendLog(`YouTube name: ${video.metadata.title}`);
-            if (video.status && video.download.status) {
-                const filename = fixtext(video.download.filename.replace(/\s*\([^)]*\)\.(mp3|mp4)$/, ".$1"));
-                const finalVideoPath = path.join(__dirname, 'uploads', filename);
+async function processVideoAndNotify(req) {
+    const abortController = new AbortController();
+    const { signal } = abortController;
+    
+    const REQUEST_TIMEOUT = 900000;
+    const timeoutId = setTimeout(() => {
+        sendLog('Operation timed out, aborting conversion');
+        abortController.abort();
+    }, REQUEST_TIMEOUT);
 
-                if (fs.existsSync(finalVideoPath)) {
-                    sendLog(`Video already exists: ${finalVideoPath}`);
-                    myfile = {
-                        path: finalVideoPath,
-                        originalname: path.basename(finalVideoPath)
-                    };
-                } else {
-                    sendLog('YouTube video found, starting download');
-                    const tempVideoPath = path.join(__dirname, 'uploads', "temp_" + filename);
-                    sendLog(`Downloading video to: ${tempVideoPath}`);
+    try {
+        sendLog('Starting video conversion process');
+        if(fs.existsSync(path.join(__dirname, 'ascii_video.txt'))) 
+            fs.unlinkSync(path.join(__dirname, 'ascii_video.txt'));
+        if(fs.existsSync(path.join(__dirname, 'audio.mp3')))
+            fs.unlinkSync(path.join(__dirname, 'audio.mp3'));
 
-                    try {
-                        const response = await fetch(video.download.url);
-                        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        var myfile = req.file;
+        let filesToCleanup = [];
 
-                        myfile = await processVideo(response, tempVideoPath);
-
-                    } catch (error) {
-                        sendLog(`Download error: ${error.message}`);
-                        return res.status(500).json({ error: 'Failed to download video: ' + error.message });
-                    }
-                }
-            } else {
-                throw new Error('YouTube video not found or download failed');
-            }
-        } catch (error) {
-            sendLog(`Error: ${error.message}`);
-            return res.status(500).json({ error: 'Failed to process YouTube video: ' + error.message });
-        }
-    }
-
-
-    var randomId = '';
-    for (let i = 0; i < 15; i++) {
-        randomId += Math.floor(Math.random() * 10);
-    }
-    sendLog(`Generated random ID: ${randomId}`);
-
-    if (myfile) {
-        console.log(myfile.path);
-        sendLog(`Processing uploaded file: ${myfile.originalname}`);
-
-        if (!fs.existsSync(myfile.path)) {
-            sendLog(`Error: Video file not found at ${myfile.path}`);
-            return res.status(500).json({ error: 'Video file not found' });
-        }
-
-        sendLog('Preparing to render the video to ASCII...');
-
-        try {
-            const result = await new Promise((resolve, reject) => {
-                render(myfile.path, (err, result) => {
-                    if (err) reject(err);
-                    else resolve(result);
-                }, (msg) => sendLog(msg, false));
-            });
-
-            sendLog(`Video processed successfully: ${result}`);
-
-            const videoName = path.basename(myfile.path);
+        if (req.body.youtubeUrl && req.body.youtubeUrl.trim()) {
             try {
+                sendLog(`Processing YouTube URL: ${req.body.youtubeUrl}`);
+                const video = await ytmp4(req.body.youtubeUrl, "360")
+                sendLog(`YouTube name: ${video.metadata.title}`);
+                if (video.status && video.download.status) {
+                    const filename = fixtext(video.download.filename.replace(/\s*\([^)]*\)\.(mp3|mp4)$/, ".$1"));
+                    const finalVideoPath = path.join(__dirname, 'uploads', filename);
 
-                const filesToUpload = [
-                    {
-                        key: randomId + '_text.txt',
-                        path: 'ascii_video.txt',
-                        contentType: 'text/plain'
-                    },
-                    {
-                        key: randomId + '_audio.mp3',
-                        path: 'audio.mp3',
-                        contentType: 'audio/mpeg'
+                    if (fs.existsSync(finalVideoPath)) {
+                        sendLog(`Video already exists: ${finalVideoPath}`);
+                        myfile = {
+                            path: finalVideoPath,
+                            originalname: path.basename(finalVideoPath)
+                        };
+                        filesToCleanup.push(finalVideoPath);
+                    } else {
+                        sendLog('YouTube video found, starting download');
+                        const tempVideoPath = path.join(__dirname, 'uploads', "temp_" + filename);
+                        sendLog(`Downloading video to: ${tempVideoPath}`);
+
+                        try {
+                            const response = await fetch(video.download.url, { signal });
+                            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+
+                            myfile = await processVideo(response, tempVideoPath);
+                            filesToCleanup.push(myfile.path);
+                        } catch (error) {
+                            safeDeleteFile(tempVideoPath);
+                            sendLog(`Download error: ${error.message}`);
+                            throw error;
+                        }
                     }
-                ];
-
-                await Promise.all(filesToUpload.map(file => {
-                    return new Promise((resolve, reject) => {
-                        s3.putObject({
-                            Bucket: bucketName,
-                            Key: file.key,
-                            Body: fs.readFileSync(file.path),
-                            ContentType: file.contentType,
-                            Metadata: { "expire-in": "3600" }
-                        }, (err, data) => {
-                            if (err) {
-                                console.error(`Upload error for ${file.key}:`, err);
-                                reject(err);
-                            } else {
-                                console.log(`${file.key} uploaded successfully ✅`);
-                                resolve(data);
-                            }
-                        });
-                    });
-                }));
-
-                sendLog(`Video information saved to Firestore: ${videoName}`);
-            } catch (firestoreError) {
-                sendLog(`Failed to save video data to Firestore: ${firestoreError.message}`);
+                } else {
+                    throw new Error('YouTube video not found or download failed');
+                }
+            } catch (error) {
+                sendLog(`Error: ${error.message}`);
+                clients.forEach(client => {
+                    if (client.readyState === WebSocket.OPEN) {
+                        client.send(JSON.stringify({ 
+                            type: 'error', 
+                            message: 'Failed to process YouTube video: ' + error.message 
+                        }));
+                    }
+                });
+                clearTimeout(timeoutId);
+                return;
             }
-        } catch (err) {
-            sendLog(`Error processing video: ${err.message}`);
+        } else if (myfile) {
+            filesToCleanup.push(myfile.path);
         }
 
-        return res.json({
-            success: true,
-            command: `cd %TEMP% &&
-curl -Lo videotoascii.exe https://github.com/DeveloperKubilay/videotoascii/raw/refs/heads/main/videotoascii.exe && 
-curl -Lo ascii_video.txt https://videotoascii-h3atfbgvbpenabgj.canadacentral-01.azurewebsites.net/txt/${randomId} && 
-curl -Lo audio.mp3 https://videotoascii-h3atfbgvbpenabgj.canadacentral-01.azurewebsites.net/audio/${randomId} && 
-videotoascii.exe`
+        var randomId = '';
+        for (let i = 0; i < 15; i++) {
+            randomId += Math.floor(Math.random() * 10);
+        }
+        sendLog(`Generated random ID: ${randomId}`);
+
+        if (myfile) {
+            console.log(myfile.path);
+            sendLog(`Processing uploaded file: ${myfile.originalname}`);
+
+            if (!fs.existsSync(myfile.path)) {
+                sendLog(`Error: Video file not found at ${myfile.path}`);
+                clients.forEach(client => {
+                    if (client.readyState === WebSocket.OPEN) {
+                        client.send(JSON.stringify({ 
+                            type: 'error', 
+                            message: 'Video file not found' 
+                        }));
+                    }
+                });
+                clearTimeout(timeoutId);
+                return;
+            }
+
+            sendLog('Preparing to render the video to ASCII...');
+
+            try {
+                const result = await new Promise((resolve, reject) => {
+                    const wrappedCallback = (err, result) => {
+                        if (signal.aborted) {
+                            reject(new Error('Operation was aborted'));
+                        } else if (err) {
+                            reject(err);
+                        } else {
+                            resolve(result);
+                        }
+                    };
+                    
+                    render(myfile.path, wrappedCallback, (msg) => {
+                        sendLog(msg, false);
+                        if (signal.aborted) {
+                            throw new Error('Operation was aborted');
+                        }
+                    });
+                });
+
+                sendLog(`Video processed successfully: ${result}`);
+
+                const videoName = path.basename(myfile.path);
+                try {
+                    const filesToUpload = [
+                        {
+                            key: randomId + '_text.txt',
+                            path: 'ascii_video.txt',
+                            contentType: 'text/plain'
+                        },
+                        {
+                            key: randomId + '_audio.mp3',
+                            path: 'audio.mp3',
+                            contentType: 'audio/mpeg'
+                        }
+                    ];
+
+                    await Promise.all(filesToUpload.map(file => {
+                        return new Promise((resolve, reject) => {
+                            if (!fs.existsSync(file.path)) {
+                                sendLog(`Warning: ${file.path} does not exist, skipping upload`);
+                                return resolve();
+                            }
+                            
+                            s3.putObject({
+                                Bucket: bucketName,
+                                Key: file.key,
+                                Body: fs.readFileSync(file.path),
+                                ContentType: file.contentType,
+                                Metadata: { "expire-in": "86400" }
+                            }, (err, data) => {
+                                if (err) {
+                                    console.error(`Upload error for ${file.key}:`, err);
+                                    reject(err);
+                                } else {
+                                    console.log(`${file.key} uploaded successfully ✅`);
+                                    resolve(data);
+                                }
+                            });
+                        });
+                    }));
+
+                    sendLog(`Video information saved ${videoName}`);
+                    
+                    clients.forEach(client => {
+                        if (client.readyState === WebSocket.OPEN) {
+                            client.send(JSON.stringify({
+                                type: 'complete',
+                                success: true,
+                                command: `Windows: curl.exe -sN https://videotoascii.azurewebsites.net/video/${randomId} | cmd.exe <br>
+                                Linux: curl -sN https://videotoascii.azurewebsites.net/video/${randomId} | bash`
+                            }));
+                        }
+                    });
+                    if (fs.existsSync('./render'))
+                        rimraf.sync('./render');
+
+                } catch (err) {
+                    sendLog(`Failed to save video data to files: ${err.message}`);
+                    clients.forEach(client => {
+                        if (client.readyState === WebSocket.OPEN) {
+                            client.send(JSON.stringify({ 
+                                type: 'error', 
+                                message: 'Failed to save video data: ' + err.message 
+                            }));
+                        }
+                    });
+                }
+            } catch (err) {
+                sendLog(`Error processing video: ${err.message}`);
+                clients.forEach(client => {
+                    if (client.readyState === WebSocket.OPEN) {
+                        client.send(JSON.stringify({ 
+                            type: 'error', 
+                            message: 'Failed to process video: ' + err.message 
+                        }));
+                    }
+                });
+            } finally {
+                filesToCleanup.forEach(safeDeleteFile);
+                clearTimeout(timeoutId);
+            }
+        } else {
+            filesToCleanup.forEach(safeDeleteFile);
+            clients.forEach(client => {
+                if (client.readyState === WebSocket.OPEN) {
+                    client.send(JSON.stringify({ 
+                        type: 'error', 
+                        message: 'Failed to process video: Unknown error' 
+                    }));
+                }
+            });
+            clearTimeout(timeoutId);
+        }
+    } catch (error) {
+        sendLog(`Unexpected error: ${error.message}`);
+        clients.forEach(client => {
+            if (client.readyState === WebSocket.OPEN) {
+                client.send(JSON.stringify({ 
+                    type: 'error', 
+                    message: 'An unexpected error occurred: ' + error.message 
+                }));
+            }
         });
-    } else {
-        return res.status(500).json({ error: 'Failed to process video: Unknown error' });
+        clearTimeout(timeoutId);
+    }
+};
+
+app.get("/video/:sessionid", async (req, res) => {
+    try {
+        res.setHeader('Content-Type', 'text/plain');
+        res.setHeader('Content-Disposition', `attachment; filename="ascii_file.bat"`);
+        const batchScript = `cd %TEMP%
+curl -Lo videotoascii.exe https://github.com/DeveloperKubilay/videotoascii/raw/refs/heads/main/videotoascii.exe
+curl -Lo ascii_video.txt https://videotoascii.azurewebsites.net/txt/${req.params.sessionid}
+curl -Lo audio.mp3 https://videotoascii.azurewebsites.net/audio/${req.params.sessionid}
+videotoascii.exe
+`;
+        res.send(batchScript);
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to retrieve video' });
     }
 });
 
@@ -260,6 +390,11 @@ app.get("/audio/:sessionid", async (req, res) => {
 async function processVideo(response, filePath) {
     return new Promise(async (resolve, reject) => {
         const fileStream = fs.createWriteStream(filePath);
+        const uploadDir = path.join(__dirname, 'uploads');
+        
+        if (!fs.existsSync(uploadDir)) {
+            fs.mkdirSync(uploadDir, { recursive: true });
+        }
 
         try {
             const reader = response.body.getReader();
@@ -275,36 +410,42 @@ async function processVideo(response, filePath) {
 
             const outputFilePath = filePath.replace("temp_", "");
 
-            ffmpeg(filePath)
-                .outputOptions([
-                    '-movflags faststart',
-                    '-c:v copy',
-                    '-c:a copy'
-                ])
-                .save(outputFilePath)
-                .on('end', () => {
-                    console.log(`Video processing completed: ${outputFilePath}`);
-                    fs.unlink(filePath, () => { });
+            const command = ffmpeg(filePath);
+            command.outputOptions([
+                '-movflags faststart',
+                '-c:v copy',
+                '-c:a copy',
+                '-threads',  '4'
+            ])
+            .on('start', (commandLine) => {
+                console.log(`FFmpeg command: ${commandLine}`);
+            })
+            .save(outputFilePath)
+            .on('end', () => {
+                console.log(`Video processing completed: ${outputFilePath}`);
+                safeDeleteFile(filePath);
 
-                    resolve({
-                        path: outputFilePath,
-                        originalname: path.basename(outputFilePath),
-                    });
-                })
-                .on('error', (err) => {
-                    console.error(`Video processing error: ${err.message}`);
-                    reject(err);
+                resolve({
+                    path: outputFilePath,
+                    originalname: path.basename(outputFilePath),
                 });
+            })
+            .on('error', (err) => {
+                console.error(`Video processing error: ${err.message}`);
+                safeDeleteFile(filePath);
+                safeDeleteFile(outputFilePath);
+                reject(err);
+            });
         } catch (err) {
             console.error(`Error in download stream: ${err.message}`);
-            fileStream.close();
-            fs.unlink(filePath, () => { });
+            fileStream.end();
+            safeDeleteFile(filePath);
             reject(err);
         }
 
         fileStream.on('error', (err) => {
             console.error(`Error writing to file: ${err.message}`);
-            fs.unlink(filePath, () => { });
+            safeDeleteFile(filePath);
             reject(err);
         });
     });

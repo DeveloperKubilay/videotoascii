@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="tr">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -270,43 +270,43 @@
     <div class="container">
         <header>
             <h1>Video to ASCII Converter</h1>
-            <p>Video yükleyin ve ASCII sanatına dönüştürün</p>
+            <p>Upload a video and convert it to ASCII art</p>
         </header>
         
         <div class="upload-container">
             <div class="upload-area">
                 <i class="fas fa-cloud-upload-alt"></i>
-                <h3>Video Yükle</h3>
-                <p>Dosyayı seçmek için tıklayın veya sürükleyip bırakın</p>
+                <h3>Upload Video</h3>
+                <p>Click to select a file or drag and drop</p>
                 <input type="file" id="video-upload" accept="video/*">
             </div>
             <p id="file-name"></p>
             
             <div class="input-group">
-                <input type="text" id="youtube-url" placeholder="YouTube URL (opsiyonel)" class="youtube-input">
-                <button id="convert-btn" class="btn" disabled>ASCII'ye Dönüştür</button>
+                <input type="text" id="youtube-url" placeholder="YouTube URL (optional)" class="youtube-input">
+                <button id="convert-btn" class="btn" disabled>Convert to ASCII</button>
             </div>
         </div>
         
         <div class="loading" id="loading">
             <div class="spinner"></div>
-            <p>Video işleniyor, lütfen bekleyin...</p>
+            <p>Processing video, please wait...</p>
             <div class="log-container" id="log-container">
-                <h4>İşlem Günlüğü:</h4>
+                <h4>Process Log:</h4>
                 <div id="log-messages"></div>
             </div>
         </div>
         
         <div class="result-container" id="result-container">
             <div class="result-tabs">
-                <button class="tab active" data-tab="output">Çıktı</button>
+                <button class="tab active" data-tab="output">Output</button>
             </div>
             
             <div class="result-content">
                 <div id="output" class="active-content">
-                    <h3>ASCII Videonuzu terminalde çalıştırın:</h3>
+                    <h3>Run your ASCII video in terminal:</h3>
                     <div class="command-box" id="command-output"></div>
-                    <p>ASCII video dosyası ve gerekli ses dosyaları oluşturuldu. Terminali açın ve yukarıdaki komutu çalıştırın.</p>
+                    <p>ASCII video file and necessary audio files have been created. Open terminal and run the command above.</p>
                 </div>
             </div>
         </div>
@@ -337,7 +337,7 @@
                 ws.close();
             }
             
-            addLogMessage('Sunucuya bağlanılıyor...');
+            addLogMessage('Connecting to server...');
             ws = new WebSocket(wsUrl);
             
             ws.onopen = () => {
@@ -348,10 +348,22 @@
             ws.onmessage = (event) => {
                 try {
                     const data = JSON.parse(event.data);
+                    
                     if (data.type === 'log') {
                         addLogMessage(data.message);
+                    } else if (data.type === 'complete') {
+                        // Handle completion notification
+                        addLogMessage('Processing complete!');
+                        loading.style.display = 'none';
+                        resultContainer.style.display = 'flex';
+                        commandOutput.innerHTML = data.command || 'Process completed successfully';
+                    } else if (data.type === 'error') {
+                        // Handle error notification
+                        addLogMessage(`Error: ${data.message}`);
+                        alert('Error: ' + data.message);
+                        loading.style.display = 'none';
                     } else {
-                        addLogMessage('Mesaj alındı: ' + JSON.stringify(data));
+                        addLogMessage('Message received: ' + JSON.stringify(data));
                     }
                 } catch (error) {
                     addLogMessage('Received: ' + event.data);
@@ -368,10 +380,10 @@
                 if (reconnectAttempts < maxReconnectAttempts) {
                     reconnectAttempts++;
                     const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000);
-                    addLogMessage(`Yeniden bağlanmaya çalışılıyor... (Deneme ${reconnectAttempts}/${maxReconnectAttempts})`);
+                    addLogMessage(`Attempting to reconnect... (Attempt ${reconnectAttempts}/${maxReconnectAttempts})`);
                     setTimeout(initWebSocket, delay);
                 } else {
-                    addLogMessage('Maksimum yeniden bağlanma denemesi sayısına ulaşıldı.');
+                    addLogMessage('Maximum number of reconnection attempts reached.');
                 }
             };
             
@@ -444,12 +456,11 @@
             const formData = new FormData();
             if (selectedFile) {
                 formData.append('video', selectedFile);
-                addLogMessage(`Video dosyası yükleniyor: ${selectedFile.name}`);
+                addLogMessage(`Uploading video file: ${selectedFile.name}`);
             }
             
             if (youtubeUrl.value.trim()) {
                 formData.append('youtubeUrl', youtubeUrl.value.trim());
-                addLogMessage(`YouTube URL işleniyor: ${youtubeUrl.value.trim()}`);
             }
             
             try {
@@ -459,17 +470,16 @@
                 });
                 
                 if (!response.ok) {
-                    throw new Error(`Sunucudan hata alındı: ${response.status} ${response.statusText}`);
+                    throw new Error(`Error received from server: ${response.status} ${response.statusText}`);
                 }
                 
-                const data = await response.json();
-                commandOutput.textContent = data.command || 'İşlem başarıyla tamamlandı';
+                // Server sends immediate response, actual results will come through WebSocket
+                addLogMessage('Video uploaded. Processing in background...');
+                // Don't hide loading or show results here - wait for WebSocket notification
                 
-                loading.style.display = 'none';
-                resultContainer.style.display = 'flex';
             } catch (error) {
-                addLogMessage(`Hata: ${error.message}`);
-                alert('Hata: ' + error.message);
+                addLogMessage(`Error: ${error.message}`);
+                alert('Error: ' + error.message);
                 loading.style.display = 'none';
             }
         });
