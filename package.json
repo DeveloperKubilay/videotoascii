@@ -1,19 +1,11 @@
 {
-  "name": "videotoascii",
+  "name": "system",
   "version": "1.0.0",
   "description": "Video to ASCII converter",
   "main": "index.js",
   "bin": "index.js",
   "scripts": {
-    "start": "node index.js",
-    "build": "pkg index.js --target node16-win-x64 --output dist/videotoascii.exe",
-    "devpkg": "npm install pkg --save-dev"
-  },
-  "pkg": {
-    "targets": [
-      "node16-win-x64"
-    ],
-    "outputPath": "dist"
+    "start": "node index.js"
   },
   "dependencies": {
     "@ffmpeg-installer/ffmpeg": "^1.1.0",
@@ -24,8 +16,5 @@
     "get-video-duration": "^4.1.0",
     "play-sound": "^1.1.6",
     "rimraf": "^6.0.1"
-  },
-  "devDependencies": {
-    "pkg": "^5.8.1"
   }
 }

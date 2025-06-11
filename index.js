@@ -122,7 +122,7 @@ async function playAndWaitForAudio(audioPath) {
       setTimeout(() => {
         console.log('Starting ASCII display...');
         resolve();
-      }, 3000);
+      }, 1000); // Değişiklik burada: 3000ms yerine 1000ms (1 saniye)
     });
   });
 }
