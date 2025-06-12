@@ -1,67 +1,67 @@
 # 🎬 Video to ASCII Converter 🖥️
 
-Bu proje normal videolarınızı harika ASCII sanat animasyonlarına dönüştürür. Gerçekten müthiş! 🔥
+This project converts your regular videos into awesome ASCII art animations. It's really amazing! 🔥
 
 ![vidtoascii](https://raw.githubusercontent.com/DeveloperKubilay/videotoascii/refs/heads/main/build/image.png)
 
-## 🌐 Çevrimiçi Olarak Hemen Deneyin!
+## 🌐 Try It Online Right Now!
 
-**Hiçbir kurulum gerekmeden, hemen şimdi video yükleyin:**
+**No installation required, upload your video right now:**
 [https://videotoascii.azurewebsites.net/](https://videotoascii.azurewebsites.net/)
 
-Web sitemizde:
-- Sadece videonuzu yükleyin
-- Dönüşüm otomatik olarak yapılır
-- Sonucu anında görüntüleyin ve indirin
-- Kodlamayla uğraşmanıza gerek yok!
+On our website:
+- Just upload your video
+- Conversion happens automatically
+- View and download the result instantly
+- No need to deal with coding!
 
-## 🖥️ Yerel Bilgisayarınızda Çalıştırmak İster misiniz?
+## 🖥️ Want to Run It on Your Local Computer?
 
-Daha fazla kontrol ve özelleştirme için kendi bilgisayarınızda çalıştırabilirsiniz:
+For more control and customization, you can run it on your own computer:
 
-### ✨ Özellikler
+### ✨ Features
 
-- 💯 Herhangi bir video dosyasını ASCII sanatına dönüştürme
-- 🎵 Orijinal videodan sesi koruma
-- ⚡ Daha hızlı dönüşüm için paralel işleme
-- 🎮 Senkronize sesle basit oynatma
+- 💯 Convert any video file to ASCII art
+- 🎵 Preserve audio from the original video
+- ⚡ Parallel processing for faster conversion
+- 🎮 Simple playback with synchronized sound
 
-### 🚀 Başlangıç
+### 🚀 Getting Started
 
-#### Gereksinimler
-- Node.js (v16 veya üstü)
+#### Requirements
+- Node.js (v16 or higher)
 - NPM
 
-#### Kurulum
+#### Installation
 ```bash
-# Bu depoyu klonlayın
+# Clone this repository
 git clone https://github.com/yourusername/videotoascii.git
 
-# Bağımlılıkları yükleyin
+# Install dependencies
 npm install
 ```
 
-### 🎮 Nasıl Kullanılır
+### 🎮 How to Use
 
-1. Video dosyanızı `video.mp4` olarak proje dizinine yerleştirin
-2. İşleyiciyi çalıştırın:
+1. Place your video file as `video.mp4` in the project directory
+2. Run the renderer:
 ```bash
 node render.js
 ```
-3. ASCII videonuzu oynatın:
+3. Play your ASCII video:
 ```bash
 node index.js
 ```
 
-### 🛠️ Konfigürasyon
+### 🛠️ Configuration
 
-`render.js` içinde bu ayarları özelleştirebilirsiniz:
-- Video çözünürlüğü
-- Kare hızı
-- İşleme için toplu iş boyutu
-- Paralel dönüşüm sayısı
+You can customize these settings in `render.js`:
+- Video resolution
+- Frame rate
+- Batch size for processing
+- Number of parallel conversions
 
-### 💡 İpuçları
+### 💡 Tips
 
-- Kısa videolar daha iyi çalışır
-- Yüksek kontrastlı videolar ASCII'ye daha iyi dönüştürülür
+- Shorter videos work better
+- Videos with high contrast convert better to ASCII
