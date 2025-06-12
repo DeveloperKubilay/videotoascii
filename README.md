@@ -2,6 +2,8 @@
 
 Bu proje normal videolarınızı harika ASCII sanat animasyonlarına dönüştürür. Gerçekten müthiş! 🔥
 
+![vidtoascii](https://raw.githubusercontent.com/DeveloperKubilay/videotoascii/refs/heads/main/build/image.png)
+
 ## 🌐 Çevrimiçi Olarak Hemen Deneyin!
 
 **Hiçbir kurulum gerekmeden, hemen şimdi video yükleyin:**
