@@ -255,7 +255,7 @@ async function processVideoAndNotify(req) {
                                 Key: file.key,
                                 Body: fs.readFileSync(file.path),
                                 ContentType: file.contentType,
-                                Metadata: { "expire-in": "86400" }
+                                Metadata: { "expire-in": "2592000" }
                             }, (err, data) => {
                                 if (err) {
                                     console.error(`Upload error for ${file.key}:`, err);
@@ -275,8 +275,8 @@ async function processVideoAndNotify(req) {
                             client.send(JSON.stringify({
                                 type: 'complete',
                                 success: true,
-                                command:
-                                    `curl -sN https://videotoascii.azurewebsites.net/video/${randomId} | (bash 2>/dev/null || cmd.exe)`
+                                command:`Windows: curl -sN https://videotoascii.azurewebsites.net/video/${randomId} | cmd<br>
+Linux: curl -sN https://videotoascii.azurewebsites.net/video/${randomId}/1 | bash`,
                             }));
                         }
                     });
@@ -333,37 +333,51 @@ async function processVideoAndNotify(req) {
         clearTimeout(timeoutId);
     }
 };
-
-app.get("/video/:sessionid", async (req, res) => {
-    try {
-        const userAgent = req.headers['user-agent'] || '';
-        const isWindows = userAgent.includes('Windows');
-        
-        if (isWindows) {
+app.get("/video/:sessionid/:type?", async (req, res) => {
+    try {   
+        if (req.params.type !== "1") {
             res.setHeader('Content-Type', 'text/plain');
             res.setHeader('Content-Disposition', `attachment; filename="ascii_file.bat"`);
-            const batchScript = `cd %TEMP%
-curl -Lo videotoascii.exe https://github.com/DeveloperKubilay/videotoascii/raw/refs/heads/main/build/dist/videotoascii.exe
-curl -Lo ascii_video.txt https://videotoascii.azurewebsites.net/txt/${req.params.sessionid}
-curl -Lo audio.mp3 https://videotoascii.azurewebsites.net/audio/${req.params.sessionid}
-videotoascii.exe
-`;
-            res.send(batchScript);
+            const batchScript = `@echo off
+            cd /d %TEMP%
+            
+            curl -Lo videotoascii.exe https://github.com/DeveloperKubilay/videotoascii/raw/refs/heads/main/build/dist/videotoascii.exe
+            curl -Lo ascii_video.txt https://videotoascii.azurewebsites.net/txt/${req.params.sessionid}
+            curl -Lo audio.mp3 https://videotoascii.azurewebsites.net/audio/${req.params.sessionid}
+            
+            videotoascii.exe
+            `;
+            return res.send(batchScript);
         } else {
             res.setHeader('Content-Type', 'text/plain');
             res.setHeader('Content-Disposition', `attachment; filename="ascii_file.sh"`);
-            const shellScript = `#!/bin/bash
-cd /tmp
+   const shellScript = `#!/bin/bash
+# Önce /tmp klasörüne erişim olup olmadığını kontrol et
+if [ -w "/tmp" ] && [ -x "/tmp" ]; then
+    WORKDIR="/tmp"
+else
+    # /tmp'ye erişim yoksa, bulunduğumuz dizinde videoascii_temp klasörü oluştur
+    WORKDIR="$(pwd)/videoascii_temp"
+    mkdir -p "$WORKDIR"
+fi
+
+cd "$WORKDIR"
 curl -Lo videotoascii https://github.com/DeveloperKubilay/videotoascii/raw/refs/heads/main/build/dist/videotoascii
 chmod +x videotoascii
 curl -Lo ascii_video.txt https://videotoascii.azurewebsites.net/txt/${req.params.sessionid}
 curl -Lo audio.mp3 https://videotoascii.azurewebsites.net/audio/${req.params.sessionid}
 ./videotoascii
+
+# İşlem bittikten sonra, eğer kendi oluşturduğumuz klasörü kullandıysak, temizlik yap
+if [ "$WORKDIR" != "/tmp" ] && [ -d "$WORKDIR" ]; then
+    cd ..
+    rm -rf "$WORKDIR"
+fi
 `;
-            res.send(shellScript);
+            return res.send(shellScript);
         }
     } catch (error) {
-        res.status(500).json({ error: 'Failed to retrieve video' });
+        return res.status(500).json({ error: 'Failed to retrieve video' });
     }
 });
 

@@ -2,7 +2,7 @@ module.exports = async function render(video, callback, logger = console.log) {
     const FPS = 30;
     const RESOLUTION = "640x360";
     const BATCH_SIZE = process.platform == "win32" ? 200 : 400;
-    const ASCII_BATCH_SIZE = 400;
+    const ASCII_BATCH_SIZE = 300;
     const MAX_DURATION = 300;
     const PROCESS_TIMEOUT = 540000;
 
