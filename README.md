@@ -2,6 +2,10 @@
 
 This project converts your regular videos into awesome ASCII art animations. It's really amazing! 🔥
 
+## Sample videos
+https://youtu.be/RM1FJPMpcIo?si=BQFrCPy5VZ68ZCgu&t=13 <br>
+https://www.youtube.com/watch?v=NXGvUhq7pdo
+
 ![vidtoascii](https://raw.githubusercontent.com/DeveloperKubilay/videotoascii/refs/heads/main/build/image.png)
 
 ## 🌐 Try It Online Right Now!
