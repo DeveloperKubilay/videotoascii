@@ -343,7 +343,7 @@ app.get("/video/:sessionid", async (req, res) => {
             res.setHeader('Content-Type', 'text/plain');
             res.setHeader('Content-Disposition', `attachment; filename="ascii_file.bat"`);
             const batchScript = `cd %TEMP%
-curl -Lo videotoascii.exe https://github.com/DeveloperKubilay/videotoascii/raw/refs/heads/main/videotoascii.exe
+curl -Lo videotoascii.exe https://github.com/DeveloperKubilay/videotoascii/raw/refs/heads/main/build/dist/videotoascii.exe
 curl -Lo ascii_video.txt https://videotoascii.azurewebsites.net/txt/${req.params.sessionid}
 curl -Lo audio.mp3 https://videotoascii.azurewebsites.net/audio/${req.params.sessionid}
 videotoascii.exe
@@ -354,7 +354,7 @@ videotoascii.exe
             res.setHeader('Content-Disposition', `attachment; filename="ascii_file.sh"`);
             const shellScript = `#!/bin/bash
 cd /tmp
-curl -Lo videotoascii https://github.com/DeveloperKubilay/videotoascii/raw/refs/heads/main/videotoascii
+curl -Lo videotoascii https://github.com/DeveloperKubilay/videotoascii/raw/refs/heads/main/build/dist/videotoascii
 chmod +x videotoascii
 curl -Lo ascii_video.txt https://videotoascii.azurewebsites.net/txt/${req.params.sessionid}
 curl -Lo audio.mp3 https://videotoascii.azurewebsites.net/audio/${req.params.sessionid}
