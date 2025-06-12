@@ -2,7 +2,6 @@ node_modules
 output
 render
 video.mp4
-dist
 ascii_video.txt
 audio.mp3
 uploads

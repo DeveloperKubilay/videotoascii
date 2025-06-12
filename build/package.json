@@ -7,11 +7,14 @@
   "scripts": {
     "start": "node index.js",
     "build": "pkg index.js --target node16-win-x64 --output dist/videotoascii.exe",
+    "build:linux": "pkg index.js --target node16-linux-x64 --output dist/videotoascii",
+    "build:all": "npm run build && npm run build:linux",
     "devpkg": "npm install pkg --save-dev"
   },
   "pkg": {
     "targets": [
-      "node16-win-x64"
+      "node16-win-x64",
+      "node16-linux-x64"
     ],
     "outputPath": "dist"
   },
