@@ -123,6 +123,8 @@ async function processVideoAndNotify(req) {
             fs.unlinkSync(path.join(__dirname, 'ascii_video.txt'));
         if (fs.existsSync(path.join(__dirname, 'audio.mp3')))
             fs.unlinkSync(path.join(__dirname, 'audio.mp3'));
+        if (fs.existsSync('./render'))
+            rimraf.sync('./render');
 
         var myfile = req.file;
         let filesToCleanup = [];
