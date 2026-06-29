@@ -1,14 +1,15 @@
 module.exports = async function render(video, callback, logger = console.log) {
     const IS_CLOUD = process.platform !== 'win32';
-    const FPS = Number(process.env.ASCII_FPS || (IS_CLOUD ? 15 : 30));
-    const RESOLUTION = process.env.ASCII_RESOLUTION || (IS_CLOUD ? "426x240" : "640x360");
+    const FPS = IS_CLOUD ? 15 : 30;
+    const RESOLUTION = IS_CLOUD ? "426x240" : "640x360";
     const BATCH_SIZE = IS_CLOUD ? 60 : 200;
-    const ASCII_BATCH_SIZE = Number(process.env.ASCII_BATCH_SIZE || (IS_CLOUD ? 6 : 60));
-    const MAX_DURATION = Number(process.env.ASCII_MAX_DURATION || (IS_CLOUD ? 90 : 300));
-    const ASCII_WIDTH = Number(process.env.ASCII_WIDTH || (IS_CLOUD ? 96 : 100));
-    const ASCII_HEIGHT = Number(process.env.ASCII_HEIGHT || (IS_CLOUD ? 28 : 25));
-    const ASCII_COLOR = (process.env.ASCII_COLOR || 'true').toLowerCase() !== 'false';
+    const ASCII_BATCH_SIZE = IS_CLOUD ? 6 : 60;
+    const MAX_DURATION = IS_CLOUD ? 90 : 300;
+    const ASCII_WIDTH = IS_CLOUD ? 104 : 100;
+    const ASCII_HEIGHT = IS_CLOUD ? 30 : 25;
+    const ASCII_COLOR = true;
     const PROCESS_TIMEOUT = 540000;
+    let loggedAnsiDetection = false;
 
     const memoryUsage = process.memoryUsage();
     logger(`Memory usage: ${Math.round(memoryUsage.rss / 1024 / 1024)}MB (RSS)`);
@@ -339,6 +340,11 @@ module.exports = async function render(video, callback, logger = console.log) {
                 color: ASCII_COLOR,
                 format: 'terminal' 
             });
+
+            if (!loggedAnsiDetection) {
+                loggedAnsiDetection = true;
+                logger(`[ascii] ansiColorDetected=${/\u001b\[[0-9;]*m/.test(asciified)}`);
+            }
 
             return asciified;
         } catch (error) {

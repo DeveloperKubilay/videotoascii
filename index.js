@@ -70,8 +70,8 @@ async function playCombinedFile(hasAudio) {
     }
     
     try {
-      console.clear();
-      console.log(frames[frameIndex].content);
+      process.stdout.write('\x1b[2J\x1b[0f');
+      process.stdout.write(frames[frameIndex].content + '\n');
       
       frameIndex += 2;
       
