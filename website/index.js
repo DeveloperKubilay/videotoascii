@@ -4,7 +4,8 @@ const path = require('path');
 const fs = require('fs');
 const WebSocket = require('ws');
 const ffmpeg = require('fluent-ffmpeg');
-if (process.platform != 'win32') ffmpeg.setFfmpegPath(path.join(__dirname, 'ffmpeg'));
+const ffmpegBinaryPath = process.platform !== 'win32' ? path.join(__dirname, 'ffmpeg') : null;
+if (ffmpegBinaryPath) ffmpeg.setFfmpegPath(ffmpegBinaryPath);
 const render = require('./render');
 const AWS = require('aws-sdk');
 const rimraf = require("rimraf");
@@ -17,6 +18,7 @@ const accessKeyId = process.env.AWS_ACCESS_KEY_ID;
 const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
 const accountId = process.env.AWS_ACCOUNT_ID;
 const bucketName = process.env.AWS_BUCKET_NAME;
+const objectTtlSeconds = Number(process.env.OBJECT_TTL_SECONDS || 60 * 60 * 24 * 30);
 
 const s3 = new AWS.S3({
     endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
@@ -93,6 +95,25 @@ function safeDeleteFile(filePath) {
         } catch (err) {
             console.error(`Failed to delete file ${filePath}: ${err.message}`);
         }
+    }
+}
+
+function logFfmpegEnvironment() {
+    try {
+        const configuredPath = typeof ffmpeg._getFfmpegPath === 'function'
+            ? ffmpeg._getFfmpegPath()
+            : ffmpegBinaryPath || 'system ffmpeg';
+        console.log(`[ffmpeg] platform=${process.platform}`);
+        console.log(`[ffmpeg] configuredPath=${configuredPath}`);
+        if (ffmpegBinaryPath) {
+            console.log(`[ffmpeg] binaryExists=${fs.existsSync(ffmpegBinaryPath)}`);
+            if (fs.existsSync(ffmpegBinaryPath)) {
+                const stats = fs.statSync(ffmpegBinaryPath);
+                console.log(`[ffmpeg] binarySizeMB=${(stats.size / 1024 / 1024).toFixed(2)}`);
+            }
+        }
+    } catch (error) {
+        console.error('[ffmpeg] failed to inspect ffmpeg environment:', error.message);
     }
 }
 
@@ -207,7 +228,9 @@ async function processVideoAndNotify(req) {
                                 Key: file.key,
                                 Body: fs.readFileSync(file.path),
                                 ContentType: file.contentType,
-                                Metadata: { "expire-in": "2592000" }
+                                Metadata: {
+                                    "expire-in": String(objectTtlSeconds),
+                                }
                             }, (err, data) => {
                                 if (err) {
                                     console.error(`Upload error for ${file.key}:`, err);
@@ -348,6 +371,7 @@ app.get("/txt/:sessionid", async (req, res) => {
         res.setHeader('Content-Disposition', `attachment; filename="${req.params.sessionid}_text.txt"`);
         res.send(data.Body.toString('utf-8'));
     } catch (error) {
+        console.error('Failed to retrieve text file:', error);
         res.status(500).json({ error: 'Failed to retrieve video' });
     }
 });
@@ -366,11 +390,13 @@ app.get("/audio/:sessionid", async (req, res) => {
         res.setHeader('Content-Disposition', `attachment; filename="${req.params.sessionid}_audio.mp3"`);
         res.send(data.Body);
     } catch (error) {
+        console.error('Failed to retrieve audio file:', error);
         res.status(500).json({ error: 'Failed to retrieve audio file' });
     }
 });
 
 server.listen(port, () => {
+    logFfmpegEnvironment();
     console.log(`Server running at http://localhost:${port}`);
 });
 

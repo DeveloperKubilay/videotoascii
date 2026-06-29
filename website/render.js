@@ -33,6 +33,8 @@ module.exports = async function render(video, callback, logger = console.log) {
             throw new Error(`Invalid video file path: ${video}`);
         }
 
+        await logFfmpegDiagnostics(video);
+
         try {
             await extractAudio(video);
         } catch (audioErr) {
@@ -49,6 +51,46 @@ module.exports = async function render(video, callback, logger = console.log) {
         if (callback) callback(err);
     }
 
+    async function logFfmpegDiagnostics(videoPath) {
+        const configuredPath = typeof ffmpeg._getFfmpegPath === 'function'
+            ? ffmpeg._getFfmpegPath()
+            : path.join(__dirname, 'ffmpeg');
+        logger(`[ffmpeg] configured path: ${configuredPath}`);
+        logger(`[ffmpeg] binary exists: ${fs.existsSync(configuredPath)}`);
+
+        const ffmpegVersion = await new Promise((resolve) => {
+            ffmpeg.getAvailableFormats((error, formats) => {
+                if (error) {
+                    logger(`[ffmpeg] getAvailableFormats error: ${error.message}`);
+                    return resolve(null);
+                }
+
+                const formatCount = formats ? Object.keys(formats).length : 0;
+                logger(`[ffmpeg] available formats: ${formatCount}`);
+                resolve(formatCount);
+            });
+        });
+
+        await new Promise((resolve) => {
+            ffmpeg.ffprobe(videoPath, (error, metadata) => {
+                if (error) {
+                    logger(`[ffmpeg] ffprobe error: ${error.message}`);
+                    return resolve();
+                }
+
+                const duration = metadata?.format?.duration;
+                const size = metadata?.format?.size;
+                const streamSummary = (metadata?.streams || [])
+                    .map((stream, index) => `${index}:${stream.codec_type || 'unknown'}:${stream.codec_name || 'n/a'}`)
+                    .join(', ');
+
+                logger(`[ffmpeg] probe duration=${duration || 'unknown'} size=${size || 'unknown'}`);
+                logger(`[ffmpeg] probe streams=${streamSummary || 'none'}`);
+                resolve(ffmpegVersion);
+            });
+        });
+    }
+
     async function extractAudio(videoPath) {
         const audioOutputPath = path.join(__dirname, 'audio.mp3');
 
@@ -63,6 +105,9 @@ module.exports = async function render(video, callback, logger = console.log) {
                 .audioBitrate('128k')
                 .on('start', (commandLine) => {
                     logger(`FFmpeg command: ${commandLine}`);
+                })
+                .on('stderr', (line) => {
+                    logger(`FFmpeg stderr: ${line}`);
                 })
                 .on('end', () => {
                     logger("Audio extraction complete");
@@ -199,6 +244,9 @@ module.exports = async function render(video, callback, logger = console.log) {
                 }, batchDir)
                 .on('start', (commandLine) => {
                     logger(`FFmpeg screenshot command: ${commandLine}`);
+                })
+                .on('stderr', (line) => {
+                    logger(`FFmpeg screenshot stderr: ${line}`);
                 })
                 .on('end', () => {
                     resolve();
