@@ -2,7 +2,6 @@ const express = require('express');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
-const { ytmp4 } = require('@vreden/youtube_scraper');
 const WebSocket = require('ws');
 const ffmpeg = require('fluent-ffmpeg');
 if (process.platform != 'win32') ffmpeg.setFfmpegPath(path.join(__dirname, 'ffmpeg'));
@@ -98,8 +97,8 @@ function safeDeleteFile(filePath) {
 }
 
 app.post('/convert', upload.single('video'), async (req, res) => {
-    if (!req.file && (!req.body.youtubeUrl || !req.body.youtubeUrl.trim())) {
-        return res.status(400).json({ error: 'No video file uploaded or YouTube URL provided' });
+    if (!req.file) {
+        return res.status(400).json({ error: 'No video file uploaded' });
     }
 
     res.status(200).json({ success: true, message: 'Processing started' });
@@ -126,59 +125,10 @@ async function processVideoAndNotify(req) {
         if (fs.existsSync('./render'))
             rimraf.sync('./render');
 
-        var myfile = req.file;
-        let filesToCleanup = [];
+        const myfile = req.file;
+        const filesToCleanup = [];
 
-        if (req.body.youtubeUrl && req.body.youtubeUrl.trim()) {
-            try {
-                sendLog(`Processing YouTube URL: ${req.body.youtubeUrl}`);
-                const video = await ytmp4(req.body.youtubeUrl, "360")
-                sendLog(`YouTube name: ${video.metadata.title}`);
-                if (video.status && video.download.status) {
-                    const filename = fixtext(video.download.filename.replace(/\s*\([^)]*\)\.(mp3|mp4)$/, ".$1"));
-                    const finalVideoPath = path.join(__dirname, 'uploads', filename);
-
-                    if (fs.existsSync(finalVideoPath)) {
-                        sendLog(`Video already exists: ${finalVideoPath}`);
-                        myfile = {
-                            path: finalVideoPath,
-                            originalname: path.basename(finalVideoPath)
-                        };
-                        filesToCleanup.push(finalVideoPath);
-                    } else {
-                        sendLog('YouTube video found, starting download');
-                        const tempVideoPath = path.join(__dirname, 'uploads', "temp_" + filename);
-                        sendLog(`Downloading video to: ${tempVideoPath}`);
-
-                        try {
-                            const response = await fetch(video.download.url, { signal });
-                            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-
-                            myfile = await processVideo(response, tempVideoPath);
-                            filesToCleanup.push(myfile.path);
-                        } catch (error) {
-                            safeDeleteFile(tempVideoPath);
-                            sendLog(`Download error: ${error.message}`);
-                            throw error;
-                        }
-                    }
-                } else {
-                    throw new Error('YouTube video not found or download failed');
-                }
-            } catch (error) {
-                sendLog(`Error: ${error.message}`);
-                clients.forEach(client => {
-                    if (client.readyState === WebSocket.OPEN) {
-                        client.send(JSON.stringify({
-                            type: 'error',
-                            message: 'Failed to process YouTube video: ' + error.message
-                        }));
-                    }
-                });
-                clearTimeout(timeoutId);
-                return;
-            }
-        } else if (myfile) {
+        if (myfile) {
             filesToCleanup.push(myfile.path);
         }
 
@@ -277,8 +227,8 @@ async function processVideoAndNotify(req) {
                             client.send(JSON.stringify({
                                 type: 'complete',
                                 success: true,
-                                command:`Windows: curl -sN https://videotoascii.azurewebsites.net/video/${randomId} | cmd<br>
-Linux: curl -sN https://videotoascii.azurewebsites.net/video/${randomId}/1 | bash`,
+                                command:`Windows: curl -sN https://videotoascii.onrender.com/video/${randomId} | cmd<br>
+Linux: curl -sN https://videotoascii.onrender.com/video/${randomId}/1 | bash`,
                             }));
                         }
                     });
@@ -344,8 +294,8 @@ app.get("/video/:sessionid/:type?", async (req, res) => {
             cd /d %TEMP%
             
             curl -Lo videotoascii.exe https://github.com/DeveloperKubilay/videotoascii/raw/refs/heads/main/build/dist/videotoascii.exe
-            curl -Lo ascii_video.txt https://videotoascii.azurewebsites.net/txt/${req.params.sessionid}
-            curl -Lo audio.mp3 https://videotoascii.azurewebsites.net/audio/${req.params.sessionid}
+            curl -Lo ascii_video.txt https://videotoascii.onrender.com/txt/${req.params.sessionid}
+            curl -Lo audio.mp3 https://videotoascii.onrender.com/audio/${req.params.sessionid}
             
             videotoascii.exe
             `;
@@ -366,8 +316,8 @@ fi
 cd "$WORKDIR"
 curl -Lo videotoascii https://github.com/DeveloperKubilay/videotoascii/raw/refs/heads/main/build/dist/videotoascii
 chmod +x videotoascii
-curl -Lo ascii_video.txt https://videotoascii.azurewebsites.net/txt/${req.params.sessionid}
-curl -Lo audio.mp3 https://videotoascii.azurewebsites.net/audio/${req.params.sessionid}
+curl -Lo ascii_video.txt https://videotoascii.onrender.com/txt/${req.params.sessionid}
+curl -Lo audio.mp3 https://videotoascii.onrender.com/audio/${req.params.sessionid}
 ./videotoascii
 
 # İşlem bittikten sonra, eğer kendi oluşturduğumuz klasörü kullandıysak, temizlik yap
@@ -419,70 +369,6 @@ app.get("/audio/:sessionid", async (req, res) => {
         res.status(500).json({ error: 'Failed to retrieve audio file' });
     }
 });
-
-async function processVideo(response, filePath) {
-    return new Promise(async (resolve, reject) => {
-        const fileStream = fs.createWriteStream(filePath);
-        const uploadDir = path.join(__dirname, 'uploads');
-
-        if (!fs.existsSync(uploadDir)) {
-            fs.mkdirSync(uploadDir, { recursive: true });
-        }
-
-        try {
-            const reader = response.body.getReader();
-            while (true) {
-                const { done, value } = await reader.read();
-
-                if (done) break;
-                fileStream.write(value);
-            }
-
-            fileStream.end();
-            console.log(`Download completed: ${filePath}`);
-
-            const outputFilePath = filePath.replace("temp_", "");
-
-            const command = ffmpeg(filePath);
-            command.outputOptions([
-                '-movflags faststart',
-                '-c:v copy',
-                '-c:a copy',
-                '-threads', '4'
-            ])
-                .on('start', (commandLine) => {
-                    console.log(`FFmpeg command: ${commandLine}`);
-                })
-                .save(outputFilePath)
-                .on('end', () => {
-                    console.log(`Video processing completed: ${outputFilePath}`);
-                    safeDeleteFile(filePath);
-
-                    resolve({
-                        path: outputFilePath,
-                        originalname: path.basename(outputFilePath),
-                    });
-                })
-                .on('error', (err) => {
-                    console.error(`Video processing error: ${err.message}`);
-                    safeDeleteFile(filePath);
-                    safeDeleteFile(outputFilePath);
-                    reject(err);
-                });
-        } catch (err) {
-            console.error(`Error in download stream: ${err.message}`);
-            fileStream.end();
-            safeDeleteFile(filePath);
-            reject(err);
-        }
-
-        fileStream.on('error', (err) => {
-            console.error(`Error writing to file: ${err.message}`);
-            safeDeleteFile(filePath);
-            reject(err);
-        });
-    });
-}
 
 server.listen(port, () => {
     console.log(`Server running at http://localhost:${port}`);

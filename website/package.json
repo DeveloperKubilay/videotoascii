@@ -9,7 +9,6 @@
   "dependencies": {
     "@azure/data-tables": "^13.2.2",
     "@azure/storage-queue": "^12.14.0",
-    "@vreden/youtube_scraper": "^1.0.0",
     "asciify-image": "^0.1.10",
     "aws-sdk": "^2.1413.0",
     "dotenv": "^16.3.1",

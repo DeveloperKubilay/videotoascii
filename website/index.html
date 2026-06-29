@@ -200,29 +200,6 @@
             100% { transform: rotate(360deg); }
         }
         
-        .input-group {
-            display: flex;
-            width: 100%;
-            max-width: 500px;
-            margin-bottom: 20px;
-            gap: 10px;
-        }
-        
-        .youtube-input {
-            flex: 1;
-            padding: 12px 15px;
-            border-radius: 50px;
-            border: none;
-            font-size: 1rem;
-            background: rgba(255, 255, 255, 0.1);
-            color: var(--light);
-            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
-        }
-        
-        .youtube-input::placeholder {
-            color: rgba(255, 255, 255, 0.5);
-        }
-        
         .command-box {
             background: #222;
             border-radius: 5px;
@@ -281,11 +258,8 @@
                 <input type="file" id="video-upload" accept="video/*">
             </div>
             <p id="file-name"></p>
-            
-            <div class="input-group">
-                <input type="text" id="youtube-url" placeholder="YouTube URL (optional)" class="youtube-input">
-                <button id="convert-btn" class="btn" disabled>Convert to ASCII</button>
-            </div>
+
+            <button id="convert-btn" class="btn" disabled>Convert to ASCII</button>
         </div>
         
         <div class="loading" id="loading">
@@ -318,7 +292,6 @@
         const convertBtn = document.getElementById('convert-btn');
         const loading = document.getElementById('loading');
         const resultContainer = document.getElementById('result-container');
-        const youtubeUrl = document.getElementById('youtube-url');
         const commandOutput = document.getElementById('command-output');
         const logMessages = document.getElementById('log-messages');
         
@@ -428,19 +401,14 @@
             if (selectedFile) {
                 fileName.textContent = selectedFile.name;
                 convertBtn.disabled = false;
-            }
-        });
-        
-        youtubeUrl.addEventListener('input', (e) => {
-            if (e.target.value.trim()) {
-                convertBtn.disabled = false;
-            } else if (!selectedFile) {
+            } else {
+                fileName.textContent = '';
                 convertBtn.disabled = true;
             }
         });
-        
+
         convertBtn.addEventListener('click', async () => {
-            if (!selectedFile && !youtubeUrl.value.trim()) return;
+            if (!selectedFile) return;
             
             loading.style.display = 'flex';
             resultContainer.style.display = 'none';
@@ -457,10 +425,6 @@
             if (selectedFile) {
                 formData.append('video', selectedFile);
                 addLogMessage(`Uploading video file: ${selectedFile.name}`);
-            }
-            
-            if (youtubeUrl.value.trim()) {
-                formData.append('youtubeUrl', youtubeUrl.value.trim());
             }
             
             try {
