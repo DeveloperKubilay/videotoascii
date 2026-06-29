@@ -119,6 +119,8 @@ module.exports = async function render(video, callback, logger = console.log) {
 
         return new Promise((resolve, reject) => {
             ffmpeg(videoPath)
+                .addOption('-hide_banner')
+                .addOption('-loglevel', 'warning')
                 .outputOptions(['-threads', "4"])
                 .output(audioOutputPath)
                 .noVideo()
@@ -128,7 +130,9 @@ module.exports = async function render(video, callback, logger = console.log) {
                     logger(`FFmpeg command: ${commandLine}`);
                 })
                 .on('stderr', (line) => {
-                    logger(`FFmpeg stderr: ${line}`);
+                    if (shouldLogFfmpegStderr(line)) {
+                        logger(`FFmpeg stderr: ${line}`);
+                    }
                 })
                 .on('end', () => {
                     logger("Audio extraction complete");
@@ -255,6 +259,8 @@ module.exports = async function render(video, callback, logger = console.log) {
     async function processFrameBatch(videoPath, batch, batchDir) {
         return new Promise((resolve, reject) => {
             const command = ffmpeg({ source: videoPath })
+                .addOption('-hide_banner')
+                .addOption('-loglevel', 'warning')
                 .outputOptions(['-threads', '4']);
 
             command
@@ -267,7 +273,9 @@ module.exports = async function render(video, callback, logger = console.log) {
                     logger(`FFmpeg screenshot command: ${commandLine}`);
                 })
                 .on('stderr', (line) => {
-                    logger(`FFmpeg screenshot stderr: ${line}`);
+                    if (shouldLogFfmpegStderr(line)) {
+                        logger(`FFmpeg screenshot stderr: ${line}`);
+                    }
                 })
                 .on('end', () => {
                     resolve();
@@ -343,5 +351,20 @@ module.exports = async function render(video, callback, logger = console.log) {
             logger(`Error processing frame at ${timestamp}: ${error.message}`);
             return null;
         }
+    }
+
+    function shouldLogFfmpegStderr(line) {
+        if (!line) {
+            return false;
+        }
+
+        const normalized = line.toLowerCase();
+        return (
+            normalized.includes('error') ||
+            normalized.includes('failed') ||
+            normalized.includes('invalid') ||
+            normalized.includes('unable') ||
+            normalized.includes('warning')
+        );
     }
 }
