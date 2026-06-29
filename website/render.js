@@ -16,7 +16,12 @@ module.exports = async function render(video, callback, logger = console.log) {
     const path = require('path');
     const { getVideoDurationInSeconds } = require('get-video-duration');
 
-    if (process.platform !== 'win32') ffmpeg.setFfmpegPath(path.join(__dirname, 'ffmpeg'));
+    if (process.platform !== 'win32') {
+        const ffmpegPath = path.join(__dirname, 'ffmpeg');
+        ensureBinaryExecutable(ffmpegPath);
+        ffmpeg.setFfmpegPath(ffmpegPath);
+        ffmpeg.setFfprobePath(ffmpegPath);
+    }
 
     const renderDir = './render';
     if (fs.existsSync(renderDir)) rimraf.sync(renderDir);
@@ -57,6 +62,10 @@ module.exports = async function render(video, callback, logger = console.log) {
             : path.join(__dirname, 'ffmpeg');
         logger(`[ffmpeg] configured path: ${configuredPath}`);
         logger(`[ffmpeg] binary exists: ${fs.existsSync(configuredPath)}`);
+        if (fs.existsSync(configuredPath)) {
+            const stats = fs.statSync(configuredPath);
+            logger(`[ffmpeg] binary mode: ${(stats.mode & 0o777).toString(8)}`);
+        }
 
         const ffmpegVersion = await new Promise((resolve) => {
             ffmpeg.getAvailableFormats((error, formats) => {
@@ -89,6 +98,18 @@ module.exports = async function render(video, callback, logger = console.log) {
                 resolve(ffmpegVersion);
             });
         });
+    }
+
+    function ensureBinaryExecutable(binaryPath) {
+        if (process.platform === 'win32' || !binaryPath || !fs.existsSync(binaryPath)) {
+            return;
+        }
+
+        try {
+            fs.chmodSync(binaryPath, 0o755);
+        } catch (error) {
+            logger(`[ffmpeg] chmod failed: ${error.message}`);
+        }
     }
 
     async function extractAudio(videoPath) {

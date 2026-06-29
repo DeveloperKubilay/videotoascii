@@ -5,7 +5,11 @@ const fs = require('fs');
 const WebSocket = require('ws');
 const ffmpeg = require('fluent-ffmpeg');
 const ffmpegBinaryPath = process.platform !== 'win32' ? path.join(__dirname, 'ffmpeg') : null;
-if (ffmpegBinaryPath) ffmpeg.setFfmpegPath(ffmpegBinaryPath);
+if (ffmpegBinaryPath) {
+    ensureBinaryExecutable(ffmpegBinaryPath);
+    ffmpeg.setFfmpegPath(ffmpegBinaryPath);
+    ffmpeg.setFfprobePath(ffmpegBinaryPath);
+}
 const render = require('./render');
 const AWS = require('aws-sdk');
 const rimraf = require("rimraf");
@@ -98,6 +102,18 @@ function safeDeleteFile(filePath) {
     }
 }
 
+function ensureBinaryExecutable(binaryPath) {
+    if (process.platform === 'win32' || !binaryPath || !fs.existsSync(binaryPath)) {
+        return;
+    }
+
+    try {
+        fs.chmodSync(binaryPath, 0o755);
+    } catch (error) {
+        console.error(`[ffmpeg] chmod failed for ${binaryPath}: ${error.message}`);
+    }
+}
+
 function logFfmpegEnvironment() {
     try {
         const configuredPath = typeof ffmpeg._getFfmpegPath === 'function'
@@ -110,6 +126,7 @@ function logFfmpegEnvironment() {
             if (fs.existsSync(ffmpegBinaryPath)) {
                 const stats = fs.statSync(ffmpegBinaryPath);
                 console.log(`[ffmpeg] binarySizeMB=${(stats.size / 1024 / 1024).toFixed(2)}`);
+                console.log(`[ffmpeg] binaryMode=${(stats.mode & 0o777).toString(8)}`);
             }
         }
     } catch (error) {
