@@ -1,14 +1,18 @@
 module.exports = async function render(video, callback, logger = console.log) {
     const IS_CLOUD = process.platform !== 'win32';
-    const FPS = IS_CLOUD ? 15 : 30;
-    const RESOLUTION = IS_CLOUD ? "426x240" : "640x360";
+    const FPS = Number(process.env.ASCII_FPS || (IS_CLOUD ? 15 : 30));
+    const RESOLUTION = process.env.ASCII_RESOLUTION || (IS_CLOUD ? "426x240" : "640x360");
     const BATCH_SIZE = IS_CLOUD ? 60 : 200;
-    const ASCII_BATCH_SIZE = IS_CLOUD ? 12 : 60;
-    const MAX_DURATION = IS_CLOUD ? 90 : 300;
+    const ASCII_BATCH_SIZE = Number(process.env.ASCII_BATCH_SIZE || (IS_CLOUD ? 6 : 60));
+    const MAX_DURATION = Number(process.env.ASCII_MAX_DURATION || (IS_CLOUD ? 90 : 300));
+    const ASCII_WIDTH = Number(process.env.ASCII_WIDTH || (IS_CLOUD ? 96 : 100));
+    const ASCII_HEIGHT = Number(process.env.ASCII_HEIGHT || (IS_CLOUD ? 28 : 25));
+    const ASCII_COLOR = (process.env.ASCII_COLOR || 'true').toLowerCase() !== 'false';
     const PROCESS_TIMEOUT = 540000;
 
     const memoryUsage = process.memoryUsage();
     logger(`Memory usage: ${Math.round(memoryUsage.rss / 1024 / 1024)}MB (RSS)`);
+    logger(`ASCII settings: fps=${FPS}, resolution=${RESOLUTION}, width=${ASCII_WIDTH}, height=${ASCII_HEIGHT}, color=${ASCII_COLOR}`);
 
     const asciify = require('asciify-image');
     const ffmpeg = require('fluent-ffmpeg');
@@ -330,9 +334,9 @@ module.exports = async function render(video, callback, logger = console.log) {
         try {
             const asciified = await asciify(imagePath, {
                 fit: 'box',
-                width: IS_CLOUD ? 72 : 100,
-                height: IS_CLOUD ? 18 : 25,
-                color: true,
+                width: ASCII_WIDTH,
+                height: ASCII_HEIGHT,
+                color: ASCII_COLOR,
                 format: 'terminal' 
             });
 
