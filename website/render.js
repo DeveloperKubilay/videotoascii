@@ -1,9 +1,10 @@
 module.exports = async function render(video, callback, logger = console.log) {
-    const FPS = 30;
-    const RESOLUTION = "640x360";
-    const BATCH_SIZE = process.platform == "win32" ? 200 : 400;
-    const ASCII_BATCH_SIZE = 300;
-    const MAX_DURATION = 300;
+    const IS_CLOUD = process.platform !== 'win32';
+    const FPS = IS_CLOUD ? 15 : 30;
+    const RESOLUTION = IS_CLOUD ? "426x240" : "640x360";
+    const BATCH_SIZE = IS_CLOUD ? 60 : 200;
+    const ASCII_BATCH_SIZE = IS_CLOUD ? 12 : 60;
+    const MAX_DURATION = IS_CLOUD ? 90 : 300;
     const PROCESS_TIMEOUT = 540000;
 
     const memoryUsage = process.memoryUsage();
@@ -174,17 +175,7 @@ module.exports = async function render(video, callback, logger = console.log) {
 
         logger(`Processing in ${batches.length} batches of up to ${BATCH_SIZE} frames each`);
 
-        const frameList = await processBatchesSequentially(videoPath, batches);
-        logger("All video frames extracted. Starting ASCII conversion...");
-
-        frameList.sort((a, b) => {
-            if (Math.abs(a.time - b.time) < 0.001) {
-                return a.index - b.index;
-            }
-            return a.time - b.time;
-        });
-
-        await convertFramesToAscii(frameList, totalFrames);
+        await processBatchesSequentially(videoPath, batches, totalFrames);
 
         rimraf.sync(renderDir);
         logger("Rendering complete!");
@@ -196,9 +187,13 @@ module.exports = async function render(video, callback, logger = console.log) {
         logger("===========================\n");
     }
 
-    async function processBatchesSequentially(videoPath, batches) {
-        const frameList = [];
+    async function processBatchesSequentially(videoPath, batches, totalFrames) {
+        const outputFilePath = 'ascii_video.txt';
+        fs.writeFileSync(outputFilePath, `ASCII VIDEO - ${totalFrames} FRAMES - FPS: ${FPS}\nUSAGE: node index.js [--combined/-c] [--sync/-s milliseconds]\n\n`);
+
         let completedFrames = 0;
+        let processedFrameCount = 0;
+        const totalBatchFrames = batches.reduce((sum, batch) => sum + batch.length, 0);
 
         for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
             const memUsage = process.memoryUsage();
@@ -209,7 +204,7 @@ module.exports = async function render(video, callback, logger = console.log) {
                 logger("Taking a break between batches to prevent timeouts");
             }
 
-            if (memUsageMB > 700) {
+            if (memUsageMB > 420) {
                 logger("Memory usage high, taking a short break to allow garbage collection");
                 global.gc && global.gc();
             }
@@ -225,7 +220,7 @@ module.exports = async function render(video, callback, logger = console.log) {
                 await processFrameBatch(videoPath, batch, batchDir);
 
                 completedFrames += batch.length;
-                logger(`Processing video frames: ${completedFrames}/${batches.flat().length} [${Math.floor(completedFrames / batches.flat().length * 100)}%]`);
+                logger(`Processing video frames: ${completedFrames}/${totalBatchFrames} [${Math.floor(completedFrames / totalBatchFrames * 100)}%]`);
 
                 const files = fs.readdirSync(batchDir);
                 const frameFiles = files.filter(file => file.startsWith('frame_1_'));
@@ -236,13 +231,13 @@ module.exports = async function render(video, callback, logger = console.log) {
                     return numA - numB;
                 });
 
-                for (let i = 0; i < frameFiles.length && i < batch.length; i++) {
-                    frameList.push({
-                        source: path.join(batchDir, frameFiles[i]),
-                        time: parseFloat(batch[i]),
-                        index: completedFrames - batch.length + i
-                    });
-                }
+                processedFrameCount += await appendBatchAsciiFrames(
+                    frameFiles.map((file) => path.join(batchDir, file)),
+                    batch,
+                    outputFilePath
+                );
+                rimraf.sync(batchDir);
+                logger(`Batch ${batchIndex} ASCII append complete. Total written frames: ${processedFrameCount}`);
 
             } catch (err) {
                 logger(`Batch processing error: ${err.message}`);
@@ -253,7 +248,8 @@ module.exports = async function render(video, callback, logger = console.log) {
             }
         }
 
-        return frameList;
+        logger("ASCII conversion complete!");
+        logger(`Created ASCII file with ${processedFrameCount} frames`);
     }
 
     async function processFrameBatch(videoPath, batch, batchDir) {
@@ -287,39 +283,34 @@ module.exports = async function render(video, callback, logger = console.log) {
         });
     }
 
-    async function convertFramesToAscii(frameList, totalFrames) {
-        const outputFilePath = 'ascii_video.txt';
-        fs.writeFileSync(outputFilePath, `ASCII VIDEO - ${totalFrames} FRAMES - FPS: ${FPS}\nUSAGE: node index.js [--combined/-c] [--sync/-s milliseconds]\n\n`);
-
+    async function appendBatchAsciiFrames(framePaths, batch, outputFilePath) {
         let processedFrameCount = 0;
-        const frames = [...frameList];
         let completedCount = 0;
-        const totalCount = frames.length;
+        const totalCount = Math.min(framePaths.length, batch.length);
 
-        const termWidth = 70;
-        const termHeight = 20;
-
-        for (let i = 0; i < frames.length; i += ASCII_BATCH_SIZE) {
+        for (let i = 0; i < totalCount; i += ASCII_BATCH_SIZE) {
             const memUsage = process.memoryUsage();
             const memUsageMB = Math.round(memUsage.rss / 1024 / 1024);
             logger(`Memory usage during ASCII conversion: ${memUsageMB}MB`);
 
-            if (memUsageMB > 700) {
+            if (memUsageMB > 420) {
                 logger("Memory usage high during ASCII conversion, triggering garbage collection");
                 global.gc && global.gc();
             }
 
-            const chunk = frames.slice(i, Math.min(i + ASCII_BATCH_SIZE, frames.length));
-            const chunkPromises = chunk.map(frame =>
-                processAsciiFrame(frame.source, frame.time, termWidth, termHeight)
-            );
+            const chunkPaths = framePaths.slice(i, Math.min(i + ASCII_BATCH_SIZE, totalCount));
+            const chunkTimes = batch.slice(i, Math.min(i + ASCII_BATCH_SIZE, totalCount));
 
-            const results = await Promise.all(chunkPromises);
+            const results = await Promise.all(
+                chunkPaths.map((imagePath, index) =>
+                    processAsciiFrame(imagePath, parseFloat(chunkTimes[index]))
+                )
+            );
 
             let batchContent = '';
             results.forEach((result, index) => {
                 if (result) {
-                    const frameTime = chunk[index].time;
+                    const frameTime = parseFloat(chunkTimes[index]);
                     batchContent += `\n===FRAME ${frameTime.toFixed(3)}===\n\n`;
                     batchContent += result + '\n';
                     processedFrameCount++;
@@ -328,21 +319,20 @@ module.exports = async function render(video, callback, logger = console.log) {
 
             fs.appendFileSync(outputFilePath, batchContent, 'utf8');
 
-            completedCount += chunk.length;
+            completedCount += chunkPaths.length;
             logger(`Converting to ASCII: ${completedCount}/${totalCount} [${Math.floor(completedCount / totalCount * 100)}%]`);
         }
 
-        logger("ASCII conversion complete!");
-        logger(`Created ASCII file with ${processedFrameCount} frames`);
+        return processedFrameCount;
     }
 
-    async function processAsciiFrame(imagePath, timestamp, width, height) {
+    async function processAsciiFrame(imagePath, timestamp) {
         try {
             const asciified = await asciify(imagePath, {
                 fit: 'box',
-                width: 100,
-                height: 25,
-                color: true,
+                width: IS_CLOUD ? 72 : 100,
+                height: IS_CLOUD ? 18 : 25,
+                color: false,
                 format: 'terminal' 
             });
 
