@@ -332,7 +332,7 @@ module.exports = async function render(video, callback, logger = console.log) {
                 fit: 'box',
                 width: IS_CLOUD ? 72 : 100,
                 height: IS_CLOUD ? 18 : 25,
-                color: false,
+                color: true,
                 format: 'terminal' 
             });
 
