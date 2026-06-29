@@ -3,17 +3,12 @@ module.exports = async function render(video, callback, logger = console.log) {
     const FPS = IS_CLOUD ? 15 : 30;
     const RESOLUTION = IS_CLOUD ? "426x240" : "640x360";
     const BATCH_SIZE = IS_CLOUD ? 60 : 200;
-    const ASCII_BATCH_SIZE = IS_CLOUD ? 6 : 60;
+    const ASCII_BATCH_SIZE = IS_CLOUD ? 12 : 60;
     const MAX_DURATION = IS_CLOUD ? 90 : 300;
-    const ASCII_WIDTH = IS_CLOUD ? 104 : 100;
-    const ASCII_HEIGHT = IS_CLOUD ? 30 : 25;
-    const ASCII_COLOR = true;
     const PROCESS_TIMEOUT = 540000;
-    let loggedAnsiDetection = false;
 
     const memoryUsage = process.memoryUsage();
     logger(`Memory usage: ${Math.round(memoryUsage.rss / 1024 / 1024)}MB (RSS)`);
-    logger(`ASCII settings: fps=${FPS}, resolution=${RESOLUTION}, width=${ASCII_WIDTH}, height=${ASCII_HEIGHT}, color=${ASCII_COLOR}`);
 
     const asciify = require('asciify-image');
     const ffmpeg = require('fluent-ffmpeg');
@@ -335,16 +330,11 @@ module.exports = async function render(video, callback, logger = console.log) {
         try {
             const asciified = await asciify(imagePath, {
                 fit: 'box',
-                width: ASCII_WIDTH,
-                height: ASCII_HEIGHT,
-                color: ASCII_COLOR,
+                width: IS_CLOUD ? 72 : 100,
+                height: IS_CLOUD ? 18 : 25,
+                color: false,
                 format: 'terminal' 
             });
-
-            if (!loggedAnsiDetection) {
-                loggedAnsiDetection = true;
-                logger(`[ascii] ansiColorDetected=${/\u001b\[[0-9;]*m/.test(asciified)}`);
-            }
 
             return asciified;
         } catch (error) {
